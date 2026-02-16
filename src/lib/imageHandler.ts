@@ -1,10 +1,10 @@
 import { put } from '@vercel/blob';
 import sharp from 'sharp';
 import { PDFDocument } from 'pdf-lib';
-import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs';
 import path from 'path';
 import fs from 'fs';
 import { encryptPDFRestricted } from '@/lib/pdfEncrypt';
+import { ensurePolyfills } from '@/lib/ensurePolyfills';
 
 export interface ExtractedImageInfo {
   id: string;
@@ -23,6 +23,10 @@ export async function extractImagesFromPDF(
   slug: string,
   onProgress?: (count: number) => Promise<void>
 ): Promise<ExtractedImageInfo[]> {
+  // Polyfill DOM globals BEFORE loading pdfjs-dist
+  ensurePolyfills();
+  const pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.mjs') as any;
+
   const images: ExtractedImageInfo[] = [];
 
   // Load with pdf-lib to find image XObjects

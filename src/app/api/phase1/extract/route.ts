@@ -1,8 +1,7 @@
 import { NextRequest } from 'next/server';
 import { put } from '@vercel/blob';
-import { PDFParse } from 'pdf-parse';
+import { ensurePolyfills } from '@/lib/ensurePolyfills';
 import { parseOM } from '@/lib/aiParser';
-import { extractImagesFromPDF } from '@/lib/imageHandler';
 
 export const maxDuration = 120;
 export const dynamic = 'force-dynamic';
@@ -23,6 +22,11 @@ export async function POST(req: NextRequest) {
   // Run extraction pipeline in background, streaming progress
   (async () => {
     try {
+      // Polyfill DOM globals BEFORE loading pdf-parse / pdfjs-dist
+      ensurePolyfills();
+      const { PDFParse } = await import('pdf-parse');
+      const { extractImagesFromPDF } = await import('@/lib/imageHandler');
+
       const formData = await req.formData();
       const file = formData.get('pdf') as File | null;
       const notes = (formData.get('notes') as string) || '';
