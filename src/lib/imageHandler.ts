@@ -18,7 +18,8 @@ export interface ExtractedImageInfo {
  */
 export async function extractImagesFromPDF(
   pdfBuffer: Buffer,
-  slug: string
+  slug: string,
+  onProgress?: (count: number) => Promise<void>
 ): Promise<ExtractedImageInfo[]> {
   const images: ExtractedImageInfo[] = [];
 
@@ -86,6 +87,7 @@ export async function extractImagesFromPDF(
             height: h,
           });
           imgIndex++;
+          if (onProgress) await onProgress(imgIndex);
         } catch {
           // Skip images that can't be decoded
           continue;
@@ -183,7 +185,7 @@ export async function lockPDF(
   if (pages.length > 0) {
     const firstPage = pages[0];
     const { height } = firstPage.getSize();
-    firstPage.drawText(`🔒 Password: ${userPassword}`, {
+    firstPage.drawText(`LOCKED - Password: ${userPassword}`, {
       x: 10,
       y: height - 15,
       size: 8,

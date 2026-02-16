@@ -2,8 +2,9 @@
 
 import { useState, useCallback, useRef } from 'react';
 import { useForm } from 'react-hook-form';
-import { FileUp, Upload, Download, Check, X, Image as ImageIcon } from 'lucide-react';
+import { FileUp, Upload, Download, Check, X, Image as ImageIcon, Eye, ZoomIn, ChevronLeft, ChevronRight } from 'lucide-react';
 import LoadingOverlay from '@/components/LoadingOverlay';
+import type { ProgressStep } from '@/components/LoadingOverlay';
 import type { OMData, ExtractedImage, FinalizedImage, GeoResult } from '@/types';
 import dynamic from 'next/dynamic';
 
@@ -15,6 +16,7 @@ export default function HomePage() {
   const [step, setStep] = useState<Step>('upload');
   const [loading, setLoading] = useState(false);
   const [loadingMessage, setLoadingMessage] = useState('');
+  const [progressSteps, setProgressSteps] = useState<ProgressStep[]>([]);
   const [error, setError] = useState('');
 
   // Upload state
@@ -31,6 +33,7 @@ export default function HomePage() {
   // Approval state
   const [compress, setCompress] = useState(true);
   const [password, setPassword] = useState('');
+  const [lightboxImg, setLightboxImg] = useState<string | null>(null);
 
   // Final state
   const [lockedPdfUrl, setLockedPdfUrl] = useState('');
@@ -40,6 +43,11 @@ export default function HomePage() {
   const { register, handleSubmit, reset, getValues } = useForm<OMData>();
 
   // ─── UPLOAD ─────────────────────────────────────────────
+  const addStep = useCallback((message: string) => {
+    setProgressSteps((prev) => [...prev, { message, timestamp: new Date() }]);
+    setLoadingMessage(message);
+  }, []);
+
   const handleFile = useCallback(
     async (file: File) => {
       if (file.type !== 'application/pdf') {
@@ -49,7 +57,8 @@ export default function HomePage() {
 
       setError('');
       setLoading(true);
-      setLoadingMessage('Uploading & extracting text, images, and AI analysis...');
+      setProgressSteps([]);
+      addStep('📤 Sending PDF to server...');
 
       try {
         const formData = new FormData();
@@ -61,35 +70,76 @@ export default function HomePage() {
           body: formData,
         });
 
-        if (!res.ok) {
-          const errData = await res.json();
-          throw new Error(errData.error || 'Extraction failed');
+        if (!res.ok || !res.body) {
+          const text = await res.text();
+          try {
+            const errData = JSON.parse(text);
+            throw new Error(errData.error || 'Extraction failed');
+          } catch {
+            throw new Error('Extraction failed');
+          }
         }
 
-        const data = await res.json();
-        setOmData(data.omData);
-        setImages(data.images);
-        setPdfBlobUrl(data.pdfBlobUrl);
-        reset(data.omData);
+        // Read SSE stream
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        let resultData: any = null;
 
-        // Geocode the address
-        if (data.omData.address) {
-          setLoadingMessage('Geocoding address...');
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';
+
+          let eventType = '';
+          for (const line of lines) {
+            if (line.startsWith('event: ')) {
+              eventType = line.slice(7).trim();
+            } else if (line.startsWith('data: ')) {
+              const data = JSON.parse(line.slice(6));
+
+              if (eventType === 'progress') {
+                addStep(data.message);
+              } else if (eventType === 'result') {
+                resultData = data;
+              } else if (eventType === 'error') {
+                throw new Error(data.error);
+              }
+            }
+          }
+        }
+
+        if (!resultData) throw new Error('No result received from server');
+
+        setOmData(resultData.omData);
+        setImages(resultData.images);
+        setPdfBlobUrl(resultData.pdfBlobUrl);
+        reset(resultData.omData);
+
+        // Geocode
+        if (resultData.omData.address) {
+          addStep('📍 Geocoding address...');
           try {
             const geoRes = await fetch('/api/phase1/geocode', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ address: data.omData.address }),
+              body: JSON.stringify({ address: resultData.omData.address }),
             });
             const geoData = await geoRes.json();
             if (geoData.lat && geoData.lng) {
               setGeo(geoData);
+              addStep(`✅ Geocoded: ${geoData.lat.toFixed(4)}, ${geoData.lng.toFixed(4)}`);
             }
           } catch {
-            // Non-critical, continue
+            addStep('⚠️ Geocoding skipped');
           }
         }
 
+        addStep('🚀 Ready! Transitioning to image approval...');
+        await new Promise((r) => setTimeout(r, 800)); // brief pause to read
         setStep('approval');
       } catch (err: any) {
         setError(err.message || 'Something went wrong');
@@ -97,7 +147,7 @@ export default function HomePage() {
         setLoading(false);
       }
     },
-    [notes, reset]
+    [notes, reset, addStep]
   );
 
   const onDrop = useCallback(
@@ -177,7 +227,12 @@ export default function HomePage() {
 
     setError('');
     setLoading(true);
-    setLoadingMessage('Locking PDF & processing images...');
+    setProgressSteps([]);
+    const selectedCount = images.filter((i) => i.selected).length;
+    const wmCount = images.filter((i) => i.selected && i.watermark).length;
+    addStep('🔒 Locking PDF with password...');
+    addStep(`🖼️ Processing ${selectedCount} image${selectedCount !== 1 ? 's' : ''}${wmCount > 0 ? ` (${wmCount} watermarked)` : ''}...`);
+    if (compress) addStep('🗜️ Compressing to ~80% JPEG quality...');
 
     try {
       const res = await fetch('/api/phase1/finalize', {
@@ -200,6 +255,9 @@ export default function HomePage() {
       const data = await res.json();
       setLockedPdfUrl(data.lockedPdfUrl);
       setFinalImages(data.images);
+      addStep(`✅ PDF locked & ${data.images.length} image${data.images.length !== 1 ? 's' : ''} processed`);
+      addStep('🎉 All done! Loading review...');
+      await new Promise((r) => setTimeout(r, 600));
       // Update OM data from form
       setOmData(getValues());
       setStep('review');
@@ -213,7 +271,7 @@ export default function HomePage() {
   // ─── RENDER ─────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-gray-50">
-      {loading && <LoadingOverlay message={loadingMessage} fullScreen />}
+      {loading && <LoadingOverlay message={loadingMessage} fullScreen steps={progressSteps} />}
 
       {/* Header */}
       <header className="bg-white border-b border-gray-200 px-6 py-4">
@@ -251,7 +309,7 @@ export default function HomePage() {
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-6 py-8">
+      <main className={`mx-auto py-8 ${step === 'review' ? 'px-4 max-w-full' : 'px-6 max-w-7xl'}`}>
         {error && (
           <div className="mb-6 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg flex items-center gap-2">
             <X className="w-4 h-4 flex-shrink-0" />
@@ -317,10 +375,23 @@ export default function HomePage() {
                   Image Approval
                 </h2>
                 <p className="text-sm text-gray-500">
-                  {images.length} images extracted. Select which to include.
+                  {images.length} images extracted &middot; {images.filter(i => i.selected).length} selected. Click images to select.
                 </p>
               </div>
-              <div className="flex items-center gap-4">
+              <div className="flex items-center gap-3 flex-wrap">
+                <button
+                  onClick={() => setImages((prev) => prev.map((img) => ({ ...img, selected: true })))}
+                  className="text-sm text-blue-600 hover:text-blue-800 font-medium"
+                >
+                  Select all
+                </button>
+                <button
+                  onClick={() => setImages((prev) => prev.map((img) => ({ ...img, selected: false })))}
+                  className="text-sm text-gray-500 hover:text-gray-700 font-medium"
+                >
+                  Deselect all
+                </button>
+                <span className="text-gray-300">|</span>
                 <label className="flex items-center gap-2 text-sm">
                   <input
                     type="checkbox"
@@ -359,29 +430,33 @@ export default function HomePage() {
                 {images.map((img) => (
                   <div
                     key={img.id}
-                    className={`relative bg-white rounded-xl border-2 overflow-hidden transition-colors ${
+                    className={`relative bg-white rounded-xl border-2 overflow-hidden transition-all cursor-pointer ${
                       img.selected
-                        ? 'border-blue-500'
-                        : 'border-gray-200 opacity-50'
+                        ? 'border-blue-500 ring-2 ring-blue-200'
+                        : 'border-gray-200 opacity-60 hover:opacity-80 hover:border-gray-300'
                     }`}
+                    onClick={() => toggleSelect(img.id)}
                   >
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={img.blobUrl}
-                      alt={img.id}
-                      className="w-full h-48 object-cover"
-                    />
-                    <div className="p-3 space-y-2">
-                      <label className="flex items-center gap-2 text-sm cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={img.selected}
-                          onChange={() => toggleSelect(img.id)}
-                          className="rounded border-gray-300 text-blue-600"
-                        />
-                        Include
-                      </label>
-                      {img.selected && (
+                    <div className="relative group">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={img.blobUrl}
+                        alt={img.id}
+                        className="w-full h-48 object-cover"
+                        draggable={false}
+                      />
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setLightboxImg(img.blobUrl); }}
+                        className="absolute bottom-2 left-2 bg-black/60 hover:bg-black/80 text-white rounded-lg px-2 py-1 text-xs flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                      >
+                        <Eye className="w-3 h-3" /> View
+                      </button>
+                    </div>
+                    {img.selected && (
+                      <div
+                        className="p-3"
+                        onClick={(e) => e.stopPropagation()}
+                      >
                         <label className="flex items-center gap-2 text-sm cursor-pointer">
                           <input
                             type="checkbox"
@@ -391,13 +466,15 @@ export default function HomePage() {
                           />
                           Watermark this?
                         </label>
-                      )}
-                    </div>
-                    {img.selected && (
-                      <div className="absolute top-2 right-2 bg-blue-500 text-white rounded-full p-1">
-                        <Check className="w-3 h-3" />
                       </div>
                     )}
+                    <div className={`absolute top-2 right-2 rounded-full p-1 transition-colors ${
+                      img.selected
+                        ? 'bg-blue-500 text-white'
+                        : 'bg-gray-300/70 text-white'
+                    }`}>
+                      <Check className="w-3 h-3" />
+                    </div>
                   </div>
                 ))}
               </div>
@@ -428,21 +505,74 @@ export default function HomePage() {
                 Next →
               </button>
             </div>
+
+            {/* Lightbox Modal */}
+            {lightboxImg && (
+              <div
+                className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4"
+                onClick={() => setLightboxImg(null)}
+              >
+                <button
+                  onClick={() => setLightboxImg(null)}
+                  className="absolute top-4 right-4 text-white/80 hover:text-white"
+                >
+                  <X className="w-8 h-8" />
+                </button>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={lightboxImg}
+                  alt="Preview"
+                  className="max-w-[90vw] max-h-[90vh] object-contain rounded-lg shadow-2xl"
+                  onClick={(e) => e.stopPropagation()}
+                />
+              </div>
+            )}
           </div>
         )}
 
         {/* ── STEP 3: REVIEW ── */}
         {step === 'review' && omData && (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Left: Downloads */}
-            <div className="bg-white rounded-xl border border-gray-200 p-6">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            {/* Left: Image Previews + Downloads */}
+            <div className="bg-white rounded-xl border border-gray-200 p-6 overflow-y-auto max-h-[90vh]">
               <h2 className="text-lg font-semibold text-gray-900 mb-4">
-                Downloads
+                Images &amp; Downloads
               </h2>
-              <div className="space-y-3">
+
+              {/* Image Preview Gallery */}
+              {finalImages.length > 0 && (
+                <div className="mb-6">
+                  <p className="text-xs font-medium text-gray-500 mb-2 uppercase tracking-wider">Image Previews</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {finalImages.map((img, i) => (
+                      <div
+                        key={`preview-${i}`}
+                        className="relative group rounded-lg overflow-hidden border border-gray-200 cursor-pointer"
+                        onClick={() => setLightboxImg(img.originalUrl)}
+                      >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={img.originalUrl}
+                          alt={img.filename}
+                          className="w-full h-24 object-cover"
+                        />
+                        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center">
+                          <ZoomIn className="w-5 h-5 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+                        </div>
+                        <p className="text-[10px] text-gray-500 truncate px-1 py-0.5">{img.filename}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Downloads */}
+              <p className="text-xs font-medium text-gray-500 mb-2 uppercase tracking-wider">Downloads</p>
+              <div className="space-y-2">
                 <a
                   href={lockedPdfUrl}
-                  download="locked-om.pdf"
+                  target="_blank"
+                  rel="noopener noreferrer"
                   className="flex items-center gap-3 p-3 bg-red-50 border border-red-200 rounded-lg hover:bg-red-100 transition-colors"
                 >
                   <Download className="w-5 h-5 text-red-600" />
@@ -458,23 +588,25 @@ export default function HomePage() {
                   <div key={i} className="space-y-1">
                     <a
                       href={img.originalUrl}
-                      download={img.filename}
-                      className="flex items-center gap-3 p-3 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 transition-colors"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-3 p-2.5 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 transition-colors"
                     >
-                      <Download className="w-5 h-5 text-blue-600" />
-                      <span className="text-sm font-medium text-blue-700">
+                      <Download className="w-4 h-4 text-blue-600" />
+                      <span className="text-sm font-medium text-blue-700 truncate">
                         {img.filename}
                       </span>
                     </a>
                     {img.watermarkedUrl && (
                       <a
                         href={img.watermarkedUrl}
-                        download={`watermarked-${img.filename}`}
-                        className="flex items-center gap-3 p-3 bg-green-50 border border-green-200 rounded-lg hover:bg-green-100 transition-colors ml-4"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-3 p-2.5 bg-green-50 border border-green-200 rounded-lg hover:bg-green-100 transition-colors ml-4"
                       >
-                        <Download className="w-5 h-5 text-green-600" />
-                        <span className="text-sm font-medium text-green-700">
-                          watermarked-{img.filename}
+                        <Download className="w-4 h-4 text-green-600" />
+                        <span className="text-sm font-medium text-green-700 truncate">
+                          WM-{img.filename}
                         </span>
                       </a>
                     )}
@@ -493,7 +625,7 @@ export default function HomePage() {
             </div>
 
             {/* Middle: Editable Form */}
-            <div className="bg-white rounded-xl border border-gray-200 p-6 overflow-y-auto max-h-[80vh]">
+            <div className="bg-white rounded-xl border border-gray-200 p-6 overflow-y-auto max-h-[90vh]">
               <h2 className="text-lg font-semibold text-gray-900 mb-4">
                 Property Details
               </h2>
@@ -547,15 +679,104 @@ export default function HomePage() {
                   />
                 </div>
 
+                {/* Rich Highlights Editor */}
                 <div>
                   <label className="block text-xs font-medium text-gray-500 mb-1">
-                    Highlights (one per line)
+                    Highlights
                   </label>
-                  <textarea
-                    {...register('highlights')}
-                    rows={5}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
-                  />
+                  <div className="border border-gray-300 rounded-lg overflow-hidden">
+                    {/* Toolbar */}
+                    <div className="flex items-center gap-1 px-2 py-1.5 bg-gray-50 border-b border-gray-200">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          document.execCommand('formatBlock', false, 'h1');
+                        }}
+                        className="px-2 py-1 text-xs font-bold rounded hover:bg-gray-200 transition-colors"
+                        title="Heading"
+                      >
+                        H1
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          document.execCommand('formatBlock', false, 'h2');
+                        }}
+                        className="px-2 py-1 text-xs font-bold rounded hover:bg-gray-200 transition-colors"
+                        title="Subheading"
+                      >
+                        H2
+                      </button>
+                      <div className="w-px h-4 bg-gray-300 mx-1" />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          document.execCommand('insertUnorderedList', false);
+                        }}
+                        className="px-2 py-1 text-xs rounded hover:bg-gray-200 transition-colors"
+                        title="Bullet List"
+                      >
+                        &bull; List
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          document.execCommand('insertOrderedList', false);
+                        }}
+                        className="px-2 py-1 text-xs rounded hover:bg-gray-200 transition-colors"
+                        title="Numbered List"
+                      >
+                        1. List
+                      </button>
+                      <div className="w-px h-4 bg-gray-300 mx-1" />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          document.execCommand('bold', false);
+                        }}
+                        className="px-2 py-1 text-xs font-bold rounded hover:bg-gray-200 transition-colors"
+                        title="Bold"
+                      >
+                        B
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          document.execCommand('italic', false);
+                        }}
+                        className="px-2 py-1 text-xs italic rounded hover:bg-gray-200 transition-colors"
+                        title="Italic"
+                      >
+                        I
+                      </button>
+                    </div>
+                    {/* Editable Area */}
+                    <div
+                      contentEditable
+                      suppressContentEditableWarning
+                      className="min-h-[120px] max-h-[200px] overflow-y-auto px-3 py-2 text-sm focus:outline-none prose prose-sm max-w-none [&_h1]:text-base [&_h1]:font-bold [&_h1]:mb-1 [&_h2]:text-sm [&_h2]:font-semibold [&_h2]:mb-1 [&_ul]:list-disc [&_ul]:ml-4 [&_ol]:list-decimal [&_ol]:ml-4 [&_li]:text-sm"
+                      dangerouslySetInnerHTML={{
+                        __html: (() => {
+                          const h = getValues('highlights');
+                          if (!h || (Array.isArray(h) && h.length === 0)) return '';
+                          // If it's already HTML (string with tags)
+                          const str = Array.isArray(h) ? h.join('\n') : String(h);
+                          if (str.includes('<')) return str;
+                          // Convert plain text lines to HTML list
+                          const lines = str.split('\n').filter(Boolean);
+                          return '<ul>' + lines.map(l => `<li>${l}</li>`).join('') + '</ul>';
+                        })(),
+                      }}
+                      onBlur={(e) => {
+                        // Save HTML content back to form as single-element array
+                        const el = e.currentTarget;
+                        const value = [el.innerHTML];
+                        const event = { target: { name: 'highlights', value } };
+                        register('highlights').onChange(event as unknown as React.ChangeEvent);
+                      }}
+                    />
+                  </div>
+                  <p className="text-[10px] text-gray-400 mt-1">Use the toolbar to format. Supports headings, lists, bold, italic.</p>
                 </div>
 
                 <button
@@ -568,11 +789,11 @@ export default function HomePage() {
             </div>
 
             {/* Right: PDF Viewer */}
-            <div className="bg-white rounded-xl border border-gray-200 p-6 overflow-hidden">
-              <h2 className="text-lg font-semibold text-gray-900 mb-4">
+            <div className="bg-white rounded-xl border border-gray-200 p-4 overflow-hidden flex flex-col">
+              <h2 className="text-lg font-semibold text-gray-900 mb-2">
                 PDF Preview
               </h2>
-              <div className="h-[70vh]">
+              <div className="flex-1 min-h-0" style={{ height: '85vh' }}>
                 <PDFViewer url={pdfBlobUrl} />
               </div>
             </div>
