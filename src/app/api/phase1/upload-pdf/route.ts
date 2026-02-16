@@ -14,16 +14,14 @@ export async function POST(req: NextRequest) {
     const jsonResponse = await handleUpload({
       body,
       request: req,
-      onBeforeGenerateToken: async (pathname) => {
-        // Validate that it's a PDF upload to the expected path
+      onBeforeGenerateToken: async () => {
         return {
           allowedContentTypes: ['application/pdf'],
           maximumSizeInBytes: 100 * 1024 * 1024, // 100MB max
-          tokenPayload: JSON.stringify({ pathname }),
         };
       },
       onUploadCompleted: async () => {
-        // Nothing needed — the extract route handles processing
+        // no-op — required by the SDK but we don't need it
       },
     });
 
