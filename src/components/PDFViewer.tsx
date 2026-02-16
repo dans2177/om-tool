@@ -22,12 +22,12 @@ export default function PDFViewer({ url }: PDFViewerProps) {
 
   return (
     <div className="flex flex-col h-full pdf-no-select">
-      <div className="flex-1 overflow-auto flex justify-center bg-gray-100 rounded-lg">
+      <div className="flex-1 overflow-auto flex justify-center bg-gray-100 rounded-lg" style={{ minHeight: 600 }}>
         <Document
           file={url}
           onLoadSuccess={({ numPages }) => setNumPages(numPages)}
           loading={
-            <div className="flex items-center justify-center h-64 text-gray-400 text-sm">
+            <div className="flex items-center justify-center text-gray-400 text-sm" style={{ minHeight: 600 }}>
               Loading PDF…
             </div>
           }
@@ -37,6 +37,9 @@ export default function PDFViewer({ url }: PDFViewerProps) {
             width={500}
             renderTextLayer={true}
             renderAnnotationLayer={true}
+            loading={
+              <div style={{ width: 500, minHeight: 600 }} />
+            }
           />
         </Document>
       </div>

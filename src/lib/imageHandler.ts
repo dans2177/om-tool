@@ -244,8 +244,11 @@ export async function lockPDF(
   //   Bits 13-32:    must be 1             — 0xFFFFF000
   const permissions = (0xFFFFF0C0 | 4 | 512 | 2048) | 0;  // = 0xFFFFFAC4 signed = -1340
 
-  const ownerKey = computeOwnerKey(ownerPassword, '');
-  const encryptionKey = computeEncryptionKey('', ownerKey, permissions, fileId);
+  // Use owner password as BOTH user and owner password.
+  // Without a user password, most PDF viewers ignore permission restrictions.
+  // With a user password set, viewers WILL enforce no-copy/no-edit/no-highlight.
+  const ownerKey = computeOwnerKey(ownerPassword, ownerPassword);
+  const encryptionKey = computeEncryptionKey(ownerPassword, ownerKey, permissions, fileId);
   const userKey = computeUserKey(encryptionKey, fileId);
 
   // Encrypt all indirect objects

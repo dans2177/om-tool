@@ -125,7 +125,9 @@ export default function ReviewPage() {
                       <Download className="w-4 h-4 text-red-500 shrink-0" />
                       <div className="min-w-0">
                         <p className="text-sm font-medium text-red-700">Locked PDF</p>
-                        <p className="text-[10px] text-red-400">Password protected</p>
+                        <p className="text-[10px] text-red-400">
+                          Password: <span className="font-mono font-bold select-all">MATTHEWS-TEST</span>
+                        </p>
                       </div>
                     </div>
                     <div className="flex gap-1.5">
@@ -178,15 +180,18 @@ export default function ReviewPage() {
                 Property Details
               </h3>
             <form onSubmit={handleSubmit((data) => setOmData(data))} className="space-y-3.5">
-              <Field label="Address" name="address" register={register} />
-              <Field label="Price" name="price" register={register} type="number" />
-              <Field label="Cap Rate" name="capRate" register={register} type="number" step="0.01" />
-              <Field label="NOI" name="noi" register={register} type="number" />
-              <Field label="Sq Ft" name="sqFt" register={register} type="number" />
-              <Field label="Year Built" name="yearBuilt" register={register} type="number" />
-              <Field label="Zoning" name="zoning" register={register} />
-              <Field label="Slug" name="slug" register={register} />
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="Address" name="address" register={register} fullWidth />
+                <Field label="Price" name="price" register={register} type="number" />
+                <Field label="Cap Rate" name="capRate" register={register} type="number" step="0.01" />
+                <Field label="NOI" name="noi" register={register} type="number" />
+                <Field label="Sq Ft" name="sqFt" register={register} type="number" />
+                <Field label="Year Built" name="yearBuilt" register={register} type="number" />
+                <Field label="Zoning" name="zoning" register={register} />
+                <Field label="Slug" name="slug" register={register} />
+              </div>
 
+              <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block text-xs font-medium text-gray-500 mb-1">Property Type</label>
                 <select
@@ -211,6 +216,7 @@ export default function ReviewPage() {
                   <option value="for-sale">For Sale</option>
                   <option value="for-lease">For Lease</option>
                 </select>
+              </div>
               </div>
 
               <div>
@@ -331,15 +337,17 @@ function Field({
   register,
   type = 'text',
   step,
+  fullWidth,
 }: {
   label: string;
   name: string;
   register: any;
   type?: string;
   step?: string;
+  fullWidth?: boolean;
 }) {
   return (
-    <div>
+    <div className={fullWidth ? 'col-span-2' : ''}>
       <label className="block text-xs font-medium text-gray-500 mb-1">{label}</label>
       <input
         {...register(name)}
