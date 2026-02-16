@@ -26,7 +26,7 @@ export default function ApprovalPage() {
   const [showCropper, setShowCropper] = useState(false);
 
   // Redirect if no data
-  if (!omData || images.length === 0) {
+  if (!omData) {
     if (typeof window !== 'undefined' && !loading) {
       router.push('/');
     }

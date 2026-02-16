@@ -26,6 +26,7 @@ export async function POST(req: NextRequest) {
       const formData = await req.formData();
       const file = formData.get('pdf') as File | null;
       const notes = (formData.get('notes') as string) || '';
+      const skipImages = formData.get('skipImages') === 'true';
 
       if (!file) {
         await send('error', { error: 'No PDF file provided' });
@@ -78,16 +79,22 @@ export async function POST(req: NextRequest) {
       }
       await send('progress', { step: 'ai-type', message: `🏷️ Type: ${omData.propertyType.toUpperCase()} | ${omData.saleOrLease}` });
 
-      // 4. Image extraction
-      await send('progress', { step: 'images', message: '🖼️ Scanning PDF for embedded images...' });
-      const images = await extractImagesFromPDF(
-        pdfBuffer,
-        omData.slug || 'unknown',
-        async (count: number) => {
-          await send('progress', { step: 'images-progress', message: `🖼️ Found ${count} image${count !== 1 ? 's' : ''} so far...` });
-        }
-      );
-      await send('progress', { step: 'images-done', message: `✅ ${images.length} image${images.length !== 1 ? 's' : ''} extracted & uploaded to cloud` });
+      // 4. Image extraction (optional)
+      let images: any[] = [];
+      if (!skipImages) {
+        await send('progress', { step: 'images', message: '🖼️ Scanning PDF for embedded images...' });
+        const extractedImages = await extractImagesFromPDF(
+          pdfBuffer,
+          omData.slug || 'unknown',
+          async (count: number) => {
+            await send('progress', { step: 'images-progress', message: `🖼️ Found ${count} image${count !== 1 ? 's' : ''} so far...` });
+          }
+        );
+        images = extractedImages;
+        await send('progress', { step: 'images-done', message: `✅ ${images.length} image${images.length !== 1 ? 's' : ''} extracted & uploaded to cloud` });
+      } else {
+        await send('progress', { step: 'images-skip', message: '⏭️ Image extraction skipped' });
+      }
 
       // 5. Done
       await send('progress', { step: 'complete', message: '🎉 Extraction complete! Loading results...' });

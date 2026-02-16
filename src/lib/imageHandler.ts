@@ -4,11 +4,7 @@ import { PDFDocument } from 'pdf-lib';
 import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs';
 import path from 'path';
 import fs from 'fs';
-// @ts-expect-error — no types for this lightweight lib
-import { md5, RC4, hexToBytes, bytesToHex } from '@pdfsmaller/pdf-encrypt-lite/dist/crypto-minimal';
-// @ts-expect-error
-import { computeOwnerKey, computeUserKey, computeEncryptionKey, encryptObject, encryptStringsInObject } from '@pdfsmaller/pdf-encrypt-lite/dist/pdf-encrypt';
-import { PDFName, PDFHexString, PDFNumber, PDFDict, PDFRawStream } from 'pdf-lib';
+import { encryptPDFRestricted } from '@/lib/pdfEncrypt';
 
 export interface ExtractedImageInfo {
   id: string;
@@ -194,97 +190,19 @@ export async function downloadImage(url: string): Promise<Buffer> {
 }
 
 /**
- * Lock a PDF with real RC4-128 encryption using @pdfsmaller/pdf-encrypt-lite primitives.
- * Permissions: print (high-res) + accessibility only.
- * No copy, no edit, no highlight, no annotations.
- * User password is empty (anyone can open/view/print).
- * Owner password required to change permissions.
+ * Lock a PDF with restrictive permissions.
+ * Empty user password = opens without prompting.
+ * Owner password = restricts editing/copying in compliant viewers.
+ *
+ * Permissions: print only. Blocks modify, copy, text selection, annotations.
+ * NOTE: Chrome/Preview ignore owner-only restrictions by design.
+ * Adobe Acrobat and other compliant readers WILL enforce them.
  */
 export async function lockPDF(
   pdfBuffer: Buffer,
   ownerPassword: string
 ): Promise<Buffer> {
-  const pdfDoc = await PDFDocument.load(pdfBuffer, {
-    ignoreEncryption: true,
-    updateMetadata: false,
-  });
-
-  const context = pdfDoc.context;
-  const trailer = context.trailerInfo;
-  const idArray = (trailer as any).ID;
-
-  let fileId: Uint8Array;
-  if (idArray && Array.isArray(idArray) && idArray.length > 0) {
-    const idString = idArray[0].toString();
-    const hexStr = idString.replace(/^<|>$/g, '');
-    fileId = hexToBytes(hexStr);
-  } else {
-    fileId = new Uint8Array(16);
-    if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
-      crypto.getRandomValues(fileId);
-    } else {
-      for (let i = 0; i < 16; i++) fileId[i] = Math.floor(Math.random() * 256);
-    }
-    const idHex1 = PDFHexString.of(bytesToHex(fileId));
-    const idHex2 = PDFHexString.of(bytesToHex(fileId));
-    (trailer as any).ID = [idHex1, idHex2];
-  }
-
-  // PDF permission flags (revision 3, 128-bit RC4):
-  //   Bits 1-2: reserved (0)
-  //   Bit  3 (4):    Print                 — YES
-  //   Bit  4 (8):    Modify                — NO
-  //   Bit  5 (16):   Copy/extract          — NO
-  //   Bit  6 (32):   Annotations/forms     — NO
-  //   Bits 7-8:      must be 1             — 0xC0
-  //   Bit  9 (256):  Fill forms            — NO
-  //   Bit 10 (512):  Accessibility extract — YES
-  //   Bit 11 (1024): Assemble              — NO
-  //   Bit 12 (2048): Print high quality    — YES
-  //   Bits 13-32:    must be 1             — 0xFFFFF000
-  const permissions = (0xFFFFF0C0 | 4 | 512 | 2048) | 0;  // = 0xFFFFFAC4 signed = -1340
-
-  // Use owner password as BOTH user and owner password.
-  // Without a user password, most PDF viewers ignore permission restrictions.
-  // With a user password set, viewers WILL enforce no-copy/no-edit/no-highlight.
-  const ownerKey = computeOwnerKey(ownerPassword, ownerPassword);
-  const encryptionKey = computeEncryptionKey(ownerPassword, ownerKey, permissions, fileId);
-  const userKey = computeUserKey(encryptionKey, fileId);
-
-  // Encrypt all indirect objects
-  const indirectObjects = context.enumerateIndirectObjects();
-  for (const [ref, obj] of indirectObjects) {
-    const objectNum = ref.objectNumber;
-    const generationNum = ref.generationNumber || 0;
-
-    if (obj instanceof PDFDict) {
-      const filter = obj.get(PDFName.of('Filter'));
-      if (filter instanceof PDFName && filter.decodeText() === 'Standard') continue;
-    }
-
-    if (obj instanceof PDFRawStream) {
-      const streamData = (obj as any).contents;
-      const encrypted = encryptObject(streamData, objectNum, generationNum, encryptionKey);
-      (obj as any).contents = encrypted;
-    }
-
-    encryptStringsInObject(obj, objectNum, generationNum, encryptionKey);
-  }
-
-  // Create /Encrypt dictionary
-  const encryptDict = context.obj({
-    Filter: PDFName.of('Standard'),
-    V: PDFNumber.of(2),
-    R: PDFNumber.of(3),
-    Length: PDFNumber.of(128),
-    P: PDFNumber.of(permissions),
-    O: PDFHexString.of(bytesToHex(ownerKey)),
-    U: PDFHexString.of(bytesToHex(userKey)),
-  });
-
-  const encryptRef = context.register(encryptDict);
-  (trailer as any).Encrypt = encryptRef;
-
-  const encryptedBytes = await pdfDoc.save({ useObjectStreams: false });
-  return Buffer.from(encryptedBytes);
+  const pdfBytes = new Uint8Array(pdfBuffer);
+  const encrypted = await encryptPDFRestricted(pdfBytes, '', ownerPassword);
+  return Buffer.from(encrypted);
 }

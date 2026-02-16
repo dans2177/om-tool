@@ -2,7 +2,7 @@
 
 import { useCallback, useRef, useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { FileUp, X, Clock, ExternalLink, Trash2 } from 'lucide-react';
+import { FileUp, X, Clock, ExternalLink, Trash2, ImagePlus } from 'lucide-react';
 import { useOM } from '@/context/OMContext';
 import LoadingOverlay from '@/components/LoadingOverlay';
 
@@ -28,8 +28,11 @@ export default function UploadPage() {
 
   const [dragOver, setDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
   const [recentOMs, setRecentOMs] = useState<RecentOM[]>([]);
   const [dumping, setDumping] = useState(false);
+  const [extractImages, setExtractImages] = useState(true);
+  const [uploadedImages, setUploadedImages] = useState<File[]>([]);
 
   // Load recent OMs on first render
   useEffect(() => {
@@ -77,6 +80,9 @@ export default function UploadPage() {
         const formData = new FormData();
         formData.append('pdf', file);
         formData.append('notes', notes);
+        if (!extractImages) {
+          formData.append('skipImages', 'true');
+        }
 
         const res = await fetch('/api/phase1/extract', {
           method: 'POST',
@@ -127,8 +133,33 @@ export default function UploadPage() {
         if (!resultData) throw new Error('No result received from server');
 
         setOmData(resultData.omData);
-        setImages(resultData.images);
         setPdfBlobUrl(resultData.pdfBlobUrl);
+
+        // If user uploaded images directly, upload those to blob storage
+        let allImages = resultData.images || [];
+        if (uploadedImages.length > 0) {
+          addStep(`Uploading ${uploadedImages.length} image${uploadedImages.length !== 1 ? 's' : ''}...`);
+          const imgFormData = new FormData();
+          imgFormData.append('slug', resultData.omData.slug || 'unknown');
+          uploadedImages.forEach((f) => imgFormData.append('images', f));
+
+          const imgRes = await fetch('/api/phase1/upload-extra', {
+            method: 'POST',
+            body: imgFormData,
+          });
+          const imgData = await imgRes.json();
+          if (imgData.images) {
+            const extras = imgData.images.map((img: any) => ({
+              ...img,
+              selected: true,
+              watermark: false as const,
+            }));
+            allImages = [...allImages, ...extras];
+            addStep(`✅ ${extras.length} image${extras.length !== 1 ? 's' : ''} uploaded`);
+          }
+        }
+
+        setImages(allImages);
 
         // Geocode
         if (resultData.omData.address) {
@@ -158,7 +189,7 @@ export default function UploadPage() {
         setLoading(false);
       }
     },
-    [notes, addStep, setError, setLoading, setProgressSteps, setOmData, setImages, setPdfBlobUrl, setGeo, router]
+    [notes, extractImages, uploadedImages, addStep, setError, setLoading, setProgressSteps, setOmData, setImages, setPdfBlobUrl, setGeo, router]
   );
 
   const onDrop = useCallback(
@@ -243,6 +274,72 @@ export default function UploadPage() {
               placeholder="Add context about this OM..."
               className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-all resize-none"
             />
+          </div>
+
+          {/* Extract images toggle */}
+          <div className="mt-4 flex items-center gap-3">
+            <button
+              type="button"
+              role="switch"
+              aria-checked={extractImages}
+              onClick={() => setExtractImages(!extractImages)}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                extractImages ? 'bg-blue-500' : 'bg-gray-300'
+              }`}
+            >
+              <span
+                className={`inline-block h-4 w-4 rounded-full bg-white transition-transform ${
+                  extractImages ? 'translate-x-6' : 'translate-x-1'
+                }`}
+              />
+            </button>
+            <span className="text-sm text-gray-600">
+              Extract images from PDF
+            </span>
+          </div>
+
+          {/* Direct image upload */}
+          <div className="mt-4">
+            <button
+              type="button"
+              onClick={() => imageInputRef.current?.click()}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-gray-600 bg-gray-50 hover:bg-gray-100 border border-gray-200 transition-colors"
+            >
+              <ImagePlus className="w-4 h-4" />
+              Upload Images Directly
+            </button>
+            <input
+              ref={imageInputRef}
+              type="file"
+              accept="image/*"
+              multiple
+              onChange={(e) => {
+                if (e.target.files) {
+                  setUploadedImages((prev) => [...prev, ...Array.from(e.target.files!)]);
+                }
+              }}
+              className="hidden"
+            />
+            {uploadedImages.length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-2">
+                {uploadedImages.map((file, idx) => (
+                  <div
+                    key={`${file.name}-${idx}`}
+                    className="flex items-center gap-1.5 bg-blue-50 text-blue-700 text-xs px-2.5 py-1.5 rounded-lg"
+                  >
+                    <span className="max-w-[120px] truncate">{file.name}</span>
+                    <button
+                      onClick={() =>
+                        setUploadedImages((prev) => prev.filter((_, i) => i !== idx))
+                      }
+                      className="text-blue-400 hover:text-blue-600"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 
