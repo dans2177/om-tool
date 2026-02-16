@@ -2,7 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
-import { Download, ZoomIn, X, ArrowLeft } from 'lucide-react';
+import { Download, Eye, ZoomIn, X, ArrowLeft, MapPin } from 'lucide-react';
 import { useOM } from '@/context/OMContext';
 import type { OMData } from '@/types';
 import dynamic from 'next/dynamic';
@@ -39,6 +39,20 @@ export default function ReviewPage() {
     router.push('/');
   };
 
+  const handleDownload = async (url: string, filename: string) => {
+    try {
+      const res = await fetch(url);
+      const blob = await res.blob();
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    } catch {
+      window.open(url, '_blank');
+    }
+  };
+
   return (
     <>
       <div className="px-4 max-w-full">
@@ -57,7 +71,7 @@ export default function ReviewPage() {
           <div />
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 lg:grid-cols-[240px_1fr_380px] gap-4">
           {/* Left: Images & Downloads */}
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 overflow-y-auto max-h-[88vh]">
             <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-4">
@@ -94,43 +108,50 @@ export default function ReviewPage() {
             <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-2">Downloads</p>
             <div className="space-y-2">
               {lockedPdfUrl && (
-                <a
-                  href={lockedPdfUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-3 p-3 bg-red-50 border border-red-100 rounded-xl hover:bg-red-100/80 transition-colors"
-                >
-                  <Download className="w-4 h-4 text-red-500" />
-                  <div>
-                    <p className="text-sm font-medium text-red-700">Locked PDF</p>
-                    <p className="text-xs text-red-400">Print-only, password protected</p>
+                <div className="p-3 bg-red-50 border border-red-100 rounded-xl">
+                  <div className="flex items-center gap-2 mb-1.5">
+                    <Download className="w-4 h-4 text-red-500 shrink-0" />
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-red-700">Locked PDF</p>
+                      <p className="text-[10px] text-red-400">Password protected</p>
+                    </div>
                   </div>
-                </a>
+                  <div className="flex gap-1.5">
+                    <a href={lockedPdfUrl} target="_blank" rel="noopener noreferrer" className="flex-1 flex items-center justify-center gap-1 text-xs font-medium text-red-600 bg-white border border-red-200 rounded-lg py-1.5 hover:bg-red-50 transition-colors">
+                      <Eye className="w-3 h-3" /> View
+                    </a>
+                    <button onClick={() => handleDownload(lockedPdfUrl, 'locked.pdf')} className="flex-1 flex items-center justify-center gap-1 text-xs font-medium text-white bg-red-500 rounded-lg py-1.5 hover:bg-red-600 transition-colors">
+                      <Download className="w-3 h-3" /> Download
+                    </button>
+                  </div>
+                </div>
               )}
 
               {finalImages.map((img, i) => (
                 <div key={i} className="space-y-1">
-                  <a
-                    href={img.originalUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-3 p-2.5 bg-blue-50 border border-blue-100 rounded-xl hover:bg-blue-100/80 transition-colors"
-                  >
-                    <Download className="w-4 h-4 text-blue-500" />
-                    <span className="text-sm font-medium text-blue-700 truncate">{img.filename}</span>
-                  </a>
+                  <div className="p-2.5 bg-blue-50 border border-blue-100 rounded-xl">
+                    <p className="text-xs font-medium text-blue-700 truncate mb-1.5">{img.filename}</p>
+                    <div className="flex gap-1.5">
+                      <a href={img.originalUrl} target="_blank" rel="noopener noreferrer" className="flex-1 flex items-center justify-center gap-1 text-[11px] font-medium text-blue-600 bg-white border border-blue-200 rounded-lg py-1 hover:bg-blue-50 transition-colors">
+                        <Eye className="w-3 h-3" /> View
+                      </a>
+                      <button onClick={() => handleDownload(img.originalUrl, img.filename)} className="flex-1 flex items-center justify-center gap-1 text-[11px] font-medium text-white bg-blue-500 rounded-lg py-1 hover:bg-blue-600 transition-colors">
+                        <Download className="w-3 h-3" /> Save
+                      </button>
+                    </div>
+                  </div>
                   {img.watermarkedUrl && (
-                    <a
-                      href={img.watermarkedUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center gap-3 p-2.5 bg-emerald-50 border border-emerald-100 rounded-xl hover:bg-emerald-100/80 transition-colors ml-4"
-                    >
-                      <Download className="w-4 h-4 text-emerald-500" />
-                      <span className="text-sm font-medium text-emerald-700 truncate">
-                        WM-{img.filename}
-                      </span>
-                    </a>
+                    <div className="p-2.5 bg-emerald-50 border border-emerald-100 rounded-xl ml-3">
+                      <p className="text-xs font-medium text-emerald-700 truncate mb-1.5">WM-{img.filename}</p>
+                      <div className="flex gap-1.5">
+                        <a href={img.watermarkedUrl} target="_blank" rel="noopener noreferrer" className="flex-1 flex items-center justify-center gap-1 text-[11px] font-medium text-emerald-600 bg-white border border-emerald-200 rounded-lg py-1 hover:bg-emerald-50 transition-colors">
+                          <Eye className="w-3 h-3" /> View
+                        </a>
+                        <button onClick={() => handleDownload(img.watermarkedUrl!, `WM-${img.filename}`)} className="flex-1 flex items-center justify-center gap-1 text-[11px] font-medium text-white bg-emerald-500 rounded-lg py-1 hover:bg-emerald-600 transition-colors">
+                          <Download className="w-3 h-3" /> Save
+                        </button>
+                      </div>
+                    </div>
                   )}
                 </div>
               ))}
@@ -138,10 +159,31 @@ export default function ReviewPage() {
 
             {geo && (
               <div className="mt-5 pt-4 border-t border-gray-100">
-                <p className="text-xs text-gray-400 mb-0.5">Geocoded</p>
-                <p className="text-sm text-gray-600 font-mono">
+                <div className="flex items-center gap-1 mb-2">
+                  <MapPin className="w-3.5 h-3.5 text-gray-400" />
+                  <p className="text-xs font-medium text-gray-400 uppercase tracking-wider">Location</p>
+                </div>
+                <p className="text-xs text-gray-600 font-mono mb-2">
                   {geo.lat.toFixed(6)}, {geo.lng.toFixed(6)}
                 </p>
+                <div className="rounded-xl overflow-hidden border border-gray-200">
+                  <iframe
+                    title="Property Location"
+                    width="100%"
+                    height="160"
+                    style={{ border: 0 }}
+                    loading="lazy"
+                    src={`https://www.openstreetmap.org/export/embed.html?bbox=${geo.lng - 0.008},${geo.lat - 0.005},${geo.lng + 0.008},${geo.lat + 0.005}&layer=mapnik&marker=${geo.lat},${geo.lng}`}
+                  />
+                </div>
+                <a
+                  href={`https://www.openstreetmap.org/?mlat=${geo.lat}&mlon=${geo.lng}#map=16/${geo.lat}/${geo.lng}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[10px] text-blue-500 hover:underline mt-1 block"
+                >
+                  Open full map &rarr;
+                </a>
               </div>
             )}
           </div>
