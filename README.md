@@ -1,36 +1,56 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# OM Tool – Phase 1
 
-## Getting Started
+A Next.js app that helps real estate teams process Offering Memorandums (OMs) by extracting key info and images fast, saving ~1 hour of manual hunting.
 
-First, run the development server:
+## Setup
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+### 1. Environment Variables
+
+Add these to your Vercel dashboard (Settings → Environment Variables) or to a local `.env.local`:
+
+```
+OPENAI_API_KEY=sk-...
+OPENCAGE_API_KEY=...
+BLOB_READ_WRITE_TOKEN=vercel_blob_rw_...
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+- **OPENAI_API_KEY** – Get from [platform.openai.com](https://platform.openai.com)
+- **OPENCAGE_API_KEY** – Get from [opencagedata.com](https://opencagedata.com)
+- **BLOB_READ_WRITE_TOKEN** – Vercel Dashboard → Storage → Blob → Create Store → Copy token
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### 2. Logo (Optional)
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Place your watermark logo at `public/logo.png`. If missing, a text-based "CONFIDENTIAL" watermark is used instead.
 
-## Learn More
+### 3. Install & Run
 
-To learn more about Next.js, take a look at the following resources:
+```bash
+npm install
+npm run dev
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### 4. Deploy
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```bash
+npx vercel --prod
+```
 
-## Deploy on Vercel
+## Flow
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+1. **Upload** – Drag-drop a PDF OM
+2. **Image Approval** – Select/deselect images, toggle watermark, compress, upload extras
+3. **Review** – Download locked PDF + images, edit extracted data, preview PDF
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Stack
+
+- Next.js 15 (App Router)
+- TypeScript
+- Tailwind CSS
+- Vercel Blob (file storage)
+- OpenAI gpt-4o-mini (data extraction)
+- OpenCage (geocoding)
+- pdf-parse + pdfjs-dist + pdf-lib (PDF processing)
+- Sharp (image processing)
+- react-pdf (PDF viewer)
+- React Hook Form (editable data)
+- lucide-react (icons)
