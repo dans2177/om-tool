@@ -78,6 +78,8 @@ export async function extractImagesFromPDF(
           const blob = await put(filename, pngBuffer, {
             access: 'public',
             contentType: 'image/png',
+            addRandomSuffix: false,
+            allowOverwrite: true,
           });
 
           images.push({

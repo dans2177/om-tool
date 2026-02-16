@@ -29,6 +29,8 @@ export async function POST(req: NextRequest) {
       const blob = await put(filename, buffer, {
         access: 'public',
         contentType: file.type || 'image/png',
+        addRandomSuffix: false,
+        allowOverwrite: true,
       });
 
       uploaded.push({

@@ -50,6 +50,8 @@ export async function POST(req: NextRequest) {
     const lockedBlob = await put(`${slug}/locked-om.pdf`, lockedPdf, {
       access: 'public',
       contentType: 'application/pdf',
+      addRandomSuffix: false,
+      allowOverwrite: true,
     });
 
     // 2. Process selected images
@@ -76,6 +78,8 @@ export async function POST(req: NextRequest) {
       const originalBlob = await put(originalFilename, originalBuffer, {
         access: 'public',
         contentType,
+        addRandomSuffix: false,
+        allowOverwrite: true,
       });
 
       let watermarkedUrl: string | undefined;
@@ -90,6 +94,8 @@ export async function POST(req: NextRequest) {
         const wmBlob = await put(wmFilename, watermarked, {
           access: 'public',
           contentType,
+          addRandomSuffix: false,
+          allowOverwrite: true,
         });
         watermarkedUrl = wmBlob.url;
       }

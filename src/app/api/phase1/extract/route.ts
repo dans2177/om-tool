@@ -43,6 +43,8 @@ export async function POST(req: NextRequest) {
       const pdfBlob = await put(`uploads/${file.name}`, pdfBuffer, {
         access: 'public',
         contentType: 'application/pdf',
+        addRandomSuffix: false,
+        allowOverwrite: true,
       });
       await send('progress', { step: 'blob-done', message: '✅ PDF stored in cloud' });
 
