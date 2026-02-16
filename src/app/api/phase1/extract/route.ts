@@ -1,11 +1,9 @@
 import { NextRequest } from 'next/server';
-import { put } from '@vercel/blob';
 import { ensurePolyfills } from '@/lib/ensurePolyfills';
 import { parseOM } from '@/lib/aiParser';
 
 export const maxDuration = 120;
 export const dynamic = 'force-dynamic';
-export const maxBodySize = '50mb';
 
 function sseMessage(event: string, data: any): string {
   return `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
@@ -28,31 +26,28 @@ export async function POST(req: NextRequest) {
       const { PDFParse } = await import('pdf-parse');
       const { extractImagesFromPDF } = await import('@/lib/imageHandler');
 
-      const formData = await req.formData();
-      const file = formData.get('pdf') as File | null;
-      const notes = (formData.get('notes') as string) || '';
-      const skipImages = formData.get('skipImages') === 'true';
+      // Accept JSON body with blob URL (PDF already uploaded client-side)
+      const { blobUrl, fileName, notes = '', skipImages = false } = await req.json();
 
-      if (!file) {
-        await send('error', { error: 'No PDF file provided' });
+      if (!blobUrl) {
+        await send('error', { error: 'No blobUrl provided' });
         await writer.close();
         return;
       }
 
-      await send('progress', { step: 'upload', message: `📄 Received "${file.name}" (${(file.size / 1024 / 1024).toFixed(1)} MB)` });
+      await send('progress', { step: 'upload', message: `📄 Processing "${fileName || 'document.pdf'}"` });
 
-      const arrayBuf = await file.arrayBuffer();
+      // Download the PDF from Vercel Blob
+      await send('progress', { step: 'download', message: '☁️ Fetching PDF from cloud storage...' });
+      const pdfRes = await fetch(blobUrl);
+      if (!pdfRes.ok) {
+        await send('error', { error: 'Failed to fetch PDF from blob storage' });
+        await writer.close();
+        return;
+      }
+      const arrayBuf = await pdfRes.arrayBuffer();
       const pdfBuffer = Buffer.from(arrayBuf);
-
-      // 1. Upload to Blob
-      await send('progress', { step: 'blob', message: '☁️ Uploading PDF to cloud storage...' });
-      const pdfBlob = await put(`uploads/${file.name}`, pdfBuffer, {
-        access: 'public',
-        contentType: 'application/pdf',
-        addRandomSuffix: false,
-        allowOverwrite: true,
-      });
-      await send('progress', { step: 'blob-done', message: '✅ PDF stored in cloud' });
+      await send('progress', { step: 'download-done', message: `✅ PDF loaded (${(pdfBuffer.length / 1024 / 1024).toFixed(1)} MB)` });
 
       // 2. Extract text
       await send('progress', { step: 'text', message: '📝 Extracting text from all pages...' });
@@ -111,7 +106,7 @@ export async function POST(req: NextRequest) {
           selected: false,
           watermark: false,
         })),
-        pdfBlobUrl: pdfBlob.url,
+        pdfBlobUrl: blobUrl,
         rawText: rawText.slice(0, 2000),
       });
 

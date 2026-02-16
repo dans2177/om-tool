@@ -2,6 +2,7 @@
 
 import { useCallback, useRef, useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { upload } from '@vercel/blob/client';
 import { FileUp, X, Clock, ExternalLink, Trash2, ImagePlus } from 'lucide-react';
 import { useOM } from '@/context/OMContext';
 import LoadingOverlay from '@/components/LoadingOverlay';
@@ -74,19 +75,27 @@ export default function UploadPage() {
       setError('');
       setLoading(true);
       setProgressSteps([]);
-      addStep('Sending PDF to server...');
+      addStep('Uploading PDF to cloud storage...');
 
       try {
-        const formData = new FormData();
-        formData.append('pdf', file);
-        formData.append('notes', notes);
-        if (!extractImages) {
-          formData.append('skipImages', 'true');
-        }
+        // 1. Upload PDF directly to Vercel Blob (bypasses 4.5MB serverless limit)
+        const blob = await upload(`uploads/${file.name}`, file, {
+          access: 'public',
+          handleUploadUrl: '/api/phase1/upload-pdf',
+        });
 
+        addStep('✅ PDF uploaded — starting extraction...');
+
+        // 2. Call extract API with the blob URL (small JSON body)
         const res = await fetch('/api/phase1/extract', {
           method: 'POST',
-          body: formData,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            blobUrl: blob.url,
+            fileName: file.name,
+            notes,
+            skipImages: !extractImages,
+          }),
         });
 
         if (!res.ok || !res.body) {
