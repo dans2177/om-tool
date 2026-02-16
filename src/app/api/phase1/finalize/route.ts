@@ -32,13 +32,7 @@ export async function POST(req: NextRequest) {
       compress: boolean;
     } = body;
 
-    const password = process.env.MARKETING_PDF_LOCK_PASSWORD;
-    if (!password) {
-      return NextResponse.json(
-        { error: 'MARKETING_PDF_LOCK_PASSWORD env var is not set' },
-        { status: 500 }
-      );
-    }
+    const password = process.env.MARKETING_PDF_LOCK_PASSWORD || 'MATTHEWS-TEST';
 
     // 1. Lock the PDF
     const pdfResponse = await fetch(pdfBlobUrl);
