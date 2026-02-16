@@ -107,7 +107,6 @@ export default function ImageCropper({ images, onComplete, onCancel }: CropperMo
 
       {/* Crop area */}
       <div className="flex-1 relative">
-        {/* @ts-expect-error react-easy-crop class component types mismatch with React 19 */}
         <Cropper
           image={currentImage.blobUrl}
           crop={crop}

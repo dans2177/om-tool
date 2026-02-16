@@ -14,7 +14,7 @@ interface ImageInput {
   id: string;
   blobUrl: string;
   selected: boolean;
-  watermark: boolean;
+  watermark: false | 'white' | 'black';
 }
 
 export async function POST(req: NextRequest) {
@@ -84,7 +84,7 @@ export async function POST(req: NextRequest) {
       let watermarkedUrl: string | undefined;
 
       if (img.watermark) {
-        let watermarked = await watermarkImage(imgBuffer);
+        let watermarked = await watermarkImage(imgBuffer, img.watermark);
         if (compress) {
           watermarked = await compressImage(watermarked, 80);
         }

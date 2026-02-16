@@ -41,7 +41,17 @@ export default function ApprovalPage() {
 
   const toggleWatermark = (id: string) => {
     setImages((prev) =>
-      prev.map((img) => (img.id === id ? { ...img, watermark: !img.watermark } : img))
+      prev.map((img) =>
+        img.id === id
+          ? { ...img, watermark: img.watermark ? false as const : 'white' as const }
+          : img
+      )
+    );
+  };
+
+  const setWatermarkColor = (id: string, color: 'white' | 'black') => {
+    setImages((prev) =>
+      prev.map((img) => (img.id === id ? { ...img, watermark: color } : img))
     );
   };
 
@@ -67,7 +77,7 @@ export default function ApprovalPage() {
           ...data.images.map((img: any) => ({
             ...img,
             selected: true,
-            watermark: false,
+            watermark: false as const,
           })),
         ]);
       }
@@ -277,16 +287,40 @@ export default function ApprovalPage() {
                   </button>
                 </div>
                 {img.selected && (
-                  <div className="p-3" onClick={(e) => e.stopPropagation()}>
+                  <div className="p-3 space-y-2" onClick={(e) => e.stopPropagation()}>
                     <label className="flex items-center gap-2 text-sm cursor-pointer text-gray-600">
                       <input
                         type="checkbox"
-                        checked={img.watermark}
+                        checked={!!img.watermark}
                         onChange={() => toggleWatermark(img.id)}
                         className="rounded border-gray-300 text-blue-600"
                       />
-                      Add watermark
+                      Watermark
                     </label>
+                    {img.watermark && (
+                      <div className="flex gap-1.5 ml-6">
+                        <button
+                          onClick={() => setWatermarkColor(img.id, 'white')}
+                          className={`px-2.5 py-1 text-xs rounded-lg font-medium transition-colors ${
+                            img.watermark === 'white'
+                              ? 'bg-gray-800 text-white'
+                              : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                          }`}
+                        >
+                          White
+                        </button>
+                        <button
+                          onClick={() => setWatermarkColor(img.id, 'black')}
+                          className={`px-2.5 py-1 text-xs rounded-lg font-medium transition-colors ${
+                            img.watermark === 'black'
+                              ? 'bg-gray-800 text-white'
+                              : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                          }`}
+                        >
+                          Black
+                        </button>
+                      </div>
+                    )}
                   </div>
                 )}
                 <div

@@ -25,7 +25,7 @@ export interface ExtractedImage {
   width: number;
   height: number;
   selected: boolean;
-  watermark: boolean;
+  watermark: false | 'white' | 'black';
 }
 
 export interface FinalizedImage {

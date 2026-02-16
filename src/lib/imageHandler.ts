@@ -137,7 +137,10 @@ export async function compressImage(
  * Apply a watermark (logo overlay) to an image.
  * Logo is read from public/logo.png.
  */
-export async function watermarkImage(imageBuffer: Buffer): Promise<Buffer> {
+export async function watermarkImage(
+  imageBuffer: Buffer,
+  color: 'white' | 'black' = 'white'
+): Promise<Buffer> {
   const logoPath = path.join(process.cwd(), 'public', 'logo.png');
 
   // Check if logo exists
@@ -148,8 +151,9 @@ export async function watermarkImage(imageBuffer: Buffer): Promise<Buffer> {
     const h = metadata.height || 600;
     const fontSize = Math.max(16, Math.floor(w / 30));
 
+    const fillColor = color === 'black' ? 'rgba(0,0,0,0.6)' : 'rgba(255,255,255,0.6)';
     const svgText = `<svg width="${w}" height="${h}">
-      <text x="${w / 2}" y="${h - 30}" font-size="${fontSize}" fill="rgba(255,255,255,0.6)"
+      <text x="${w / 2}" y="${h - 30}" font-size="${fontSize}" fill="${fillColor}"
         text-anchor="middle" font-family="Arial, sans-serif" font-weight="bold">
         CONFIDENTIAL
       </text>
@@ -165,10 +169,15 @@ export async function watermarkImage(imageBuffer: Buffer): Promise<Buffer> {
 
   // Resize logo to ~25% of image width
   const logoWidth = Math.floor(imgWidth * 0.25);
-  const logoBuffer = await sharp(logoPath)
+  let logoBuffer = await sharp(logoPath)
     .resize({ width: logoWidth })
     .ensureAlpha(0.5)
     .toBuffer();
+
+  // If black watermark requested, invert the logo colors
+  if (color === 'black') {
+    logoBuffer = await sharp(logoBuffer).negate({ alpha: false }).toBuffer();
+  }
 
   return sharp(imageBuffer)
     .composite([{ input: logoBuffer, gravity: 'southeast' }])
