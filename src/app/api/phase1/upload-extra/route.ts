@@ -3,6 +3,7 @@ import { put } from '@vercel/blob';
 import sharp from 'sharp';
 
 export const dynamic = 'force-dynamic';
+export const maxBodySize = '50mb';
 
 export async function POST(req: NextRequest) {
   try {

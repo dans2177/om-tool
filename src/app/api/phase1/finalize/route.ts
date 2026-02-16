@@ -8,6 +8,7 @@ import {
 } from '@/lib/imageHandler';
 
 export const maxDuration = 120;
+export const maxBodySize = '50mb';
 export const dynamic = 'force-dynamic';
 
 interface ImageInput {

@@ -5,6 +5,7 @@ import { parseOM } from '@/lib/aiParser';
 
 export const maxDuration = 120;
 export const dynamic = 'force-dynamic';
+export const maxBodySize = '50mb';
 
 function sseMessage(event: string, data: any): string {
   return `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
