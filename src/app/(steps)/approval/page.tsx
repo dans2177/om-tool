@@ -1,9 +1,11 @@
 'use client';
 
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Upload, Check, Eye, X, Image as ImageIcon } from 'lucide-react';
 import { useOM } from '@/context/OMContext';
 import LoadingOverlay from '@/components/LoadingOverlay';
+import ImageCropper from '@/components/ImageCropper';
 
 export default function ApprovalPage() {
   const router = useRouter();
@@ -20,6 +22,8 @@ export default function ApprovalPage() {
     lightboxImg, setLightboxImg,
     setLockedPdfUrl, setFinalImages,
   } = useOM();
+
+  const [showCropper, setShowCropper] = useState(false);
 
   // Redirect if no data
   if (!omData || images.length === 0) {
@@ -74,12 +78,62 @@ export default function ApprovalPage() {
     }
   };
 
-  const handleFinalize = async () => {
+  const handleStartFinalize = () => {
+    const selected = images.filter((i) => i.selected);
+    if (selected.length === 0) return;
+    setShowCropper(true);
+  };
+
+  const handleCropComplete = async (croppedBlobs: Map<string, Blob>) => {
+    setShowCropper(false);
+
+    // Build an updated images array with cropped blobUrls
+    let updatedImages = [...images];
+
+    if (croppedBlobs.size > 0) {
+      setLoading(true);
+      setProgressSteps([]);
+      addStep(`Uploading ${croppedBlobs.size} cropped image${croppedBlobs.size !== 1 ? 's' : ''}...`);
+
+      try {
+        for (const [imageId, blob] of croppedBlobs.entries()) {
+          const formData = new FormData();
+          formData.append('slug', omData?.slug || 'unknown');
+          formData.append('imageId', imageId);
+          formData.append('file', blob, `${imageId}.jpg`);
+
+          const res = await fetch('/api/phase1/crop-upload', {
+            method: 'POST',
+            body: formData,
+          });
+
+          if (!res.ok) throw new Error('Failed to upload cropped image');
+
+          const data = await res.json();
+          updatedImages = updatedImages.map((img) =>
+            img.id === imageId ? { ...img, blobUrl: data.blobUrl } : img
+          );
+        }
+        // Update state with new blobUrls
+        setImages(updatedImages);
+      } catch (err: any) {
+        setError(err.message || 'Failed to upload cropped images');
+        setLoading(false);
+        return;
+      }
+      setLoading(false);
+    }
+
+    // Proceed with finalization using the updated images
+    await doFinalize(updatedImages);
+  };
+
+  const doFinalize = async (currentImages: typeof images) => {
     setError('');
     setLoading(true);
     setProgressSteps([]);
-    const selectedCount = images.filter((i) => i.selected).length;
-    const wmCount = images.filter((i) => i.selected && i.watermark).length;
+    const selectedCount = currentImages.filter((i) => i.selected).length;
+    const wmCount = currentImages.filter((i) => i.selected && i.watermark).length;
     addStep('Locking PDF with password protection...');
     addStep(
       `Processing ${selectedCount} image${selectedCount !== 1 ? 's' : ''}${
@@ -93,7 +147,7 @@ export default function ApprovalPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          images,
+          images: currentImages,
           pdfBlobUrl,
           slug: omData?.slug || 'unknown',
           compress,
@@ -256,15 +310,24 @@ export default function ApprovalPage() {
               </p>
             </div>
             <button
-              onClick={handleFinalize}
+              onClick={handleStartFinalize}
               disabled={selectedCount === 0}
               className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-200 disabled:text-gray-400 text-white font-medium px-8 py-2.5 rounded-xl transition-colors whitespace-nowrap"
             >
-              Finalize &amp; Review →
+              Crop &amp; Finalize →
             </button>
           </div>
         </div>
       </div>
+
+      {/* Image Cropper */}
+      {showCropper && (
+        <ImageCropper
+          images={images.filter((i) => i.selected)}
+          onComplete={handleCropComplete}
+          onCancel={() => setShowCropper(false)}
+        />
+      )}
 
       {/* Lightbox */}
       {lightboxImg && (
