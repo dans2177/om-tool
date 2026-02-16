@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { put } from '@vercel/blob';
+import sharp from 'sharp';
 
 export const dynamic = 'force-dynamic';
 
@@ -16,6 +17,7 @@ export async function POST(req: NextRequest) {
     const uploaded: {
       id: string;
       blobUrl: string;
+      thumbnailUrl: string;
       width: number;
       height: number;
     }[] = [];
@@ -33,9 +35,23 @@ export async function POST(req: NextRequest) {
         allowOverwrite: true,
       });
 
+      // Generate thumbnail
+      const thumbBuffer = await sharp(buffer)
+        .resize({ width: 200 })
+        .jpeg({ quality: 60 })
+        .toBuffer();
+      const thumbFilename = `${slug}/images/extra-thumb-${Date.now()}-${i}.jpg`;
+      const thumbBlob = await put(thumbFilename, thumbBuffer, {
+        access: 'public',
+        contentType: 'image/jpeg',
+        addRandomSuffix: false,
+        allowOverwrite: true,
+      });
+
       uploaded.push({
         id: `extra-${Date.now()}-${i}`,
         blobUrl: blob.url,
+        thumbnailUrl: thumbBlob.url,
         width: 0,
         height: 0,
       });

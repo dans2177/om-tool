@@ -17,7 +17,6 @@ export default function ApprovalPage() {
     images, setImages,
     pdfBlobUrl,
     compress, setCompress,
-    password, setPassword,
     lightboxImg, setLightboxImg,
     setLockedPdfUrl, setFinalImages,
   } = useOM();
@@ -76,17 +75,12 @@ export default function ApprovalPage() {
   };
 
   const handleFinalize = async () => {
-    if (!password) {
-      setError('Please enter a password for PDF locking.');
-      return;
-    }
-
     setError('');
     setLoading(true);
     setProgressSteps([]);
     const selectedCount = images.filter((i) => i.selected).length;
     const wmCount = images.filter((i) => i.selected && i.watermark).length;
-    addStep('Locking PDF with password...');
+    addStep('Locking PDF with password protection...');
     addStep(
       `Processing ${selectedCount} image${selectedCount !== 1 ? 's' : ''}${
         wmCount > 0 ? ` (${wmCount} watermarked)` : ''
@@ -101,7 +95,6 @@ export default function ApprovalPage() {
         body: JSON.stringify({
           images,
           pdfBlobUrl,
-          password,
           slug: omData?.slug || 'unknown',
           compress,
         }),
@@ -213,10 +206,11 @@ export default function ApprovalPage() {
                 <div className="relative group">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
-                    src={img.blobUrl}
+                    src={img.thumbnailUrl || img.blobUrl}
                     alt={img.id}
                     className="w-full h-48 object-cover"
                     draggable={false}
+                    loading="lazy"
                   />
                   <button
                     onClick={(e) => {
@@ -253,25 +247,17 @@ export default function ApprovalPage() {
           </div>
         )}
 
-        {/* Password + submit */}
+        {/* Finalize */}
         <div className="mt-6 bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
           <div className="flex items-end gap-4 flex-wrap">
             <div className="flex-1 min-w-[200px]">
-              <label className="block text-sm font-medium text-gray-600 mb-1.5">
-                PDF Lock Password
-              </label>
-              <input
-                type="text"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="Enter password to lock the PDF..."
-                className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-all"
-              />
-              <p className="text-xs text-gray-400 mt-1">Restricts the final PDF (print-only, no copy).</p>
+              <p className="text-sm text-gray-500">
+                The PDF will be encrypted with password protection (print-only, no copy/edit).
+              </p>
             </div>
             <button
               onClick={handleFinalize}
-              disabled={!password || selectedCount === 0}
+              disabled={selectedCount === 0}
               className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-200 disabled:text-gray-400 text-white font-medium px-8 py-2.5 rounded-xl transition-colors whitespace-nowrap"
             >
               Finalize &amp; Review →

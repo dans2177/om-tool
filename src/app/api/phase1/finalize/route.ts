@@ -23,21 +23,20 @@ export async function POST(req: NextRequest) {
     const {
       images,
       pdfBlobUrl,
-      password,
       slug,
       compress,
     }: {
       images: ImageInput[];
       pdfBlobUrl: string;
-      password: string;
       slug: string;
       compress: boolean;
     } = body;
 
+    const password = process.env.MARKETING_PDF_LOCK_PASSWORD;
     if (!password) {
       return NextResponse.json(
-        { error: 'Password is required for PDF locking' },
-        { status: 400 }
+        { error: 'MARKETING_PDF_LOCK_PASSWORD env var is not set' },
+        { status: 500 }
       );
     }
 

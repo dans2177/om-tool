@@ -1,9 +1,10 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 import { Document, Page, pdfjs } from 'react-pdf';
 import 'react-pdf/dist/Page/AnnotationLayer.css';
 import 'react-pdf/dist/Page/TextLayer.css';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 
 // Configure PDF.js worker
 pdfjs.GlobalWorkerOptions.workerSrc = new URL(
@@ -17,37 +18,49 @@ interface PDFViewerProps {
 
 export default function PDFViewer({ url }: PDFViewerProps) {
   const [numPages, setNumPages] = useState<number>(0);
-  const containerRef = useRef<HTMLDivElement>(null);
+  const [pageNumber, setPageNumber] = useState(1);
 
   return (
-    <div
-      ref={containerRef}
-      className="h-full overflow-auto bg-gray-100 rounded-lg pdf-no-select"
-    >
-      <Document
-        file={url}
-        onLoadSuccess={({ numPages }) => setNumPages(numPages)}
-        loading={
-          <div className="flex items-center justify-center h-64 text-gray-400 text-sm">
-            Loading PDF…
-          </div>
-        }
-      >
-        {Array.from({ length: numPages }, (_, i) => (
-          <div key={i} className="flex justify-center py-2">
-            <Page
-              pageNumber={i + 1}
-              width={containerRef.current?.clientWidth ? Math.min(containerRef.current.clientWidth - 32, 600) : 500}
-              renderTextLayer={true}
-              renderAnnotationLayer={true}
-            />
-          </div>
-        ))}
-      </Document>
+    <div className="flex flex-col h-full pdf-no-select">
+      <div className="flex-1 overflow-auto flex justify-center bg-gray-100 rounded-lg">
+        <Document
+          file={url}
+          onLoadSuccess={({ numPages }) => setNumPages(numPages)}
+          loading={
+            <div className="flex items-center justify-center h-64 text-gray-400 text-sm">
+              Loading PDF…
+            </div>
+          }
+        >
+          <Page
+            pageNumber={pageNumber}
+            width={500}
+            renderTextLayer={true}
+            renderAnnotationLayer={true}
+          />
+        </Document>
+      </div>
+
       {numPages > 0 && (
-        <p className="text-center text-xs text-gray-400 py-2">
-          {numPages} page{numPages !== 1 ? 's' : ''}
-        </p>
+        <div className="flex items-center justify-center gap-4 mt-3">
+          <button
+            onClick={() => setPageNumber((p) => Math.max(1, p - 1))}
+            disabled={pageNumber <= 1}
+            className="p-1 rounded hover:bg-gray-100 disabled:opacity-30"
+          >
+            <ChevronLeft className="w-5 h-5" />
+          </button>
+          <span className="text-sm text-gray-600">
+            Page {pageNumber} of {numPages}
+          </span>
+          <button
+            onClick={() => setPageNumber((p) => Math.min(numPages, p + 1))}
+            disabled={pageNumber >= numPages}
+            className="p-1 rounded hover:bg-gray-100 disabled:opacity-30"
+          >
+            <ChevronRight className="w-5 h-5" />
+          </button>
+        </div>
       )}
     </div>
   );

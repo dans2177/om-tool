@@ -2,7 +2,7 @@
 
 import { useCallback, useRef, useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { FileUp, X, Clock, ExternalLink } from 'lucide-react';
+import { FileUp, X, Clock, ExternalLink, Trash2 } from 'lucide-react';
 import { useOM } from '@/context/OMContext';
 import LoadingOverlay from '@/components/LoadingOverlay';
 
@@ -29,6 +29,7 @@ export default function UploadPage() {
   const [dragOver, setDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [recentOMs, setRecentOMs] = useState<RecentOM[]>([]);
+  const [dumping, setDumping] = useState(false);
 
   // Load recent OMs on first render
   useEffect(() => {
@@ -39,6 +40,26 @@ export default function UploadPage() {
       })
       .catch(() => {});
   }, []);
+
+  const handleDump = async () => {
+    if (!confirm('This will delete ALL uploaded OMs and images from blob storage. Are you sure?')) return;
+    setDumping(true);
+    try {
+      const res = await fetch('/api/phase1/dump', { method: 'DELETE' });
+      const data = await res.json();
+      if (data.success) {
+        setRecentOMs([]);
+        resetAll();
+        alert(`Wiped ${data.deleted} files from storage.`);
+      } else {
+        alert(data.error || 'Dump failed');
+      }
+    } catch {
+      alert('Failed to dump database');
+    } finally {
+      setDumping(false);
+    }
+  };
 
   const handleFile = useCallback(
     async (file: File) => {
@@ -259,6 +280,19 @@ export default function UploadPage() {
             </div>
           </div>
         )}
+
+        {/* Dump Storage */}
+        <div className="mt-10 pt-6 border-t border-gray-100">
+          <button
+            onClick={handleDump}
+            disabled={dumping}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-red-600 bg-red-50 hover:bg-red-100 border border-red-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <Trash2 className="w-4 h-4" />
+            {dumping ? 'Dumping…' : 'Dump Storage'}
+          </button>
+          <p className="text-xs text-gray-400 mt-1">Delete all uploaded OMs and images from blob storage.</p>
+        </div>
       </div>
     </>
   );

@@ -21,6 +21,7 @@ export interface GeoResult {
 export interface ExtractedImage {
   id: string;
   blobUrl: string;
+  thumbnailUrl: string;
   width: number;
   height: number;
   selected: boolean;

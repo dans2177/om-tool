@@ -71,128 +71,112 @@ export default function ReviewPage() {
           <div />
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-[240px_1fr_380px] gap-4">
-          {/* Left: Images & Downloads */}
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 overflow-y-auto max-h-[88vh]">
-            <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-4">
-              Images &amp; Downloads
-            </h3>
-
-            {/* Image gallery */}
-            {finalImages.length > 0 && (
-              <div className="mb-5">
-                <div className="grid grid-cols-2 gap-2">
-                  {finalImages.map((img, i) => (
-                    <div
-                      key={`preview-${i}`}
-                      className="relative group rounded-xl overflow-hidden border border-gray-100 cursor-pointer"
-                      onClick={() => setLightboxImg(img.originalUrl)}
-                    >
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={img.originalUrl}
-                        alt={img.filename}
-                        className="w-full h-24 object-cover"
-                      />
-                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center">
-                        <ZoomIn className="w-5 h-5 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
-                      </div>
-                      <p className="text-[10px] text-gray-400 truncate px-2 py-1">{img.filename}</p>
-                    </div>
-                  ))}
-                </div>
+        <div className="grid grid-cols-1 lg:grid-cols-[1fr_420px] gap-4">
+          {/* Left: PDF + Files & Images */}
+          <div className="space-y-4">
+            {/* PDF Viewer */}
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 overflow-hidden flex flex-col">
+              <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3">
+                PDF Preview
+              </h3>
+              <div className="flex-1 min-h-0" style={{ height: '60vh' }}>
+                <PDFViewer url={pdfBlobUrl} />
               </div>
-            )}
+            </div>
 
-            {/* Downloads */}
-            <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-2">Downloads</p>
-            <div className="space-y-2">
-              {lockedPdfUrl && (
-                <div className="p-3 bg-red-50 border border-red-100 rounded-xl">
-                  <div className="flex items-center gap-2 mb-1.5">
-                    <Download className="w-4 h-4 text-red-500 shrink-0" />
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium text-red-700">Locked PDF</p>
-                      <p className="text-[10px] text-red-400">Password protected</p>
-                    </div>
-                  </div>
-                  <div className="flex gap-1.5">
-                    <a href={lockedPdfUrl} target="_blank" rel="noopener noreferrer" className="flex-1 flex items-center justify-center gap-1 text-xs font-medium text-red-600 bg-white border border-red-200 rounded-lg py-1.5 hover:bg-red-50 transition-colors">
-                      <Eye className="w-3 h-3" /> View
-                    </a>
-                    <button onClick={() => handleDownload(lockedPdfUrl, 'locked.pdf')} className="flex-1 flex items-center justify-center gap-1 text-xs font-medium text-white bg-red-500 rounded-lg py-1.5 hover:bg-red-600 transition-colors">
-                      <Download className="w-3 h-3" /> Download
-                    </button>
+            {/* Files & Images */}
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+              <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-4">
+                Files &amp; Images
+              </h3>
+
+              {/* Image gallery */}
+              {finalImages.length > 0 && (
+                <div className="mb-5">
+                  <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+                    {finalImages.map((img, i) => (
+                      <div
+                        key={`preview-${i}`}
+                        className="relative group rounded-xl overflow-hidden border border-gray-100 cursor-pointer"
+                        onClick={() => setLightboxImg(img.originalUrl)}
+                      >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={img.originalUrl}
+                          alt={img.filename}
+                          className="w-full h-24 object-cover"
+                        />
+                        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center">
+                          <ZoomIn className="w-5 h-5 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+                        </div>
+                        <p className="text-[10px] text-gray-400 truncate px-2 py-1">{img.filename}</p>
+                      </div>
+                    ))}
                   </div>
                 </div>
               )}
 
-              {finalImages.map((img, i) => (
-                <div key={i} className="space-y-1">
-                  <div className="p-2.5 bg-blue-50 border border-blue-100 rounded-xl">
-                    <p className="text-xs font-medium text-blue-700 truncate mb-1.5">{img.filename}</p>
+              {/* Downloads */}
+              <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-2">Downloads</p>
+              <div className="space-y-2">
+                {lockedPdfUrl && (
+                  <div className="p-3 bg-red-50 border border-red-100 rounded-xl">
+                    <div className="flex items-center gap-2 mb-1.5">
+                      <Download className="w-4 h-4 text-red-500 shrink-0" />
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-red-700">Locked PDF</p>
+                        <p className="text-[10px] text-red-400">Password protected</p>
+                      </div>
+                    </div>
                     <div className="flex gap-1.5">
-                      <a href={img.originalUrl} target="_blank" rel="noopener noreferrer" className="flex-1 flex items-center justify-center gap-1 text-[11px] font-medium text-blue-600 bg-white border border-blue-200 rounded-lg py-1 hover:bg-blue-50 transition-colors">
+                      <a href={lockedPdfUrl} target="_blank" rel="noopener noreferrer" className="flex-1 flex items-center justify-center gap-1 text-xs font-medium text-red-600 bg-white border border-red-200 rounded-lg py-1.5 hover:bg-red-50 transition-colors">
                         <Eye className="w-3 h-3" /> View
                       </a>
-                      <button onClick={() => handleDownload(img.originalUrl, img.filename)} className="flex-1 flex items-center justify-center gap-1 text-[11px] font-medium text-white bg-blue-500 rounded-lg py-1 hover:bg-blue-600 transition-colors">
-                        <Download className="w-3 h-3" /> Save
+                      <button onClick={() => handleDownload(lockedPdfUrl, 'locked.pdf')} className="flex-1 flex items-center justify-center gap-1 text-xs font-medium text-white bg-red-500 rounded-lg py-1.5 hover:bg-red-600 transition-colors">
+                        <Download className="w-3 h-3" /> Download
                       </button>
                     </div>
                   </div>
-                  {img.watermarkedUrl && (
-                    <div className="p-2.5 bg-emerald-50 border border-emerald-100 rounded-xl ml-3">
-                      <p className="text-xs font-medium text-emerald-700 truncate mb-1.5">WM-{img.filename}</p>
+                )}
+
+                {finalImages.map((img, i) => (
+                  <div key={i} className="space-y-1">
+                    <div className="p-2.5 bg-blue-50 border border-blue-100 rounded-xl">
+                      <p className="text-xs font-medium text-blue-700 truncate mb-1.5">{img.filename}</p>
                       <div className="flex gap-1.5">
-                        <a href={img.watermarkedUrl} target="_blank" rel="noopener noreferrer" className="flex-1 flex items-center justify-center gap-1 text-[11px] font-medium text-emerald-600 bg-white border border-emerald-200 rounded-lg py-1 hover:bg-emerald-50 transition-colors">
+                        <a href={img.originalUrl} target="_blank" rel="noopener noreferrer" className="flex-1 flex items-center justify-center gap-1 text-[11px] font-medium text-blue-600 bg-white border border-blue-200 rounded-lg py-1 hover:bg-blue-50 transition-colors">
                           <Eye className="w-3 h-3" /> View
                         </a>
-                        <button onClick={() => handleDownload(img.watermarkedUrl!, `WM-${img.filename}`)} className="flex-1 flex items-center justify-center gap-1 text-[11px] font-medium text-white bg-emerald-500 rounded-lg py-1 hover:bg-emerald-600 transition-colors">
+                        <button onClick={() => handleDownload(img.originalUrl, img.filename)} className="flex-1 flex items-center justify-center gap-1 text-[11px] font-medium text-white bg-blue-500 rounded-lg py-1 hover:bg-blue-600 transition-colors">
                           <Download className="w-3 h-3" /> Save
                         </button>
                       </div>
                     </div>
-                  )}
-                </div>
-              ))}
-            </div>
-
-            {geo && (
-              <div className="mt-5 pt-4 border-t border-gray-100">
-                <div className="flex items-center gap-1 mb-2">
-                  <MapPin className="w-3.5 h-3.5 text-gray-400" />
-                  <p className="text-xs font-medium text-gray-400 uppercase tracking-wider">Location</p>
-                </div>
-                <p className="text-xs text-gray-600 font-mono mb-2">
-                  {geo.lat.toFixed(6)}, {geo.lng.toFixed(6)}
-                </p>
-                <div className="rounded-xl overflow-hidden border border-gray-200">
-                  <iframe
-                    title="Property Location"
-                    width="100%"
-                    height="160"
-                    style={{ border: 0 }}
-                    loading="lazy"
-                    src={`https://www.openstreetmap.org/export/embed.html?bbox=${geo.lng - 0.008},${geo.lat - 0.005},${geo.lng + 0.008},${geo.lat + 0.005}&layer=mapnik&marker=${geo.lat},${geo.lng}`}
-                  />
-                </div>
-                <a
-                  href={`https://www.openstreetmap.org/?mlat=${geo.lat}&mlon=${geo.lng}#map=16/${geo.lat}/${geo.lng}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-[10px] text-blue-500 hover:underline mt-1 block"
-                >
-                  Open full map &rarr;
-                </a>
+                    {img.watermarkedUrl && (
+                      <div className="p-2.5 bg-emerald-50 border border-emerald-100 rounded-xl ml-3">
+                        <p className="text-xs font-medium text-emerald-700 truncate mb-1.5">WM-{img.filename}</p>
+                        <div className="flex gap-1.5">
+                          <a href={img.watermarkedUrl} target="_blank" rel="noopener noreferrer" className="flex-1 flex items-center justify-center gap-1 text-[11px] font-medium text-emerald-600 bg-white border border-emerald-200 rounded-lg py-1 hover:bg-emerald-50 transition-colors">
+                            <Eye className="w-3 h-3" /> View
+                          </a>
+                          <button onClick={() => handleDownload(img.watermarkedUrl!, `WM-${img.filename}`)} className="flex-1 flex items-center justify-center gap-1 text-[11px] font-medium text-white bg-emerald-500 rounded-lg py-1 hover:bg-emerald-600 transition-colors">
+                            <Download className="w-3 h-3" /> Save
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))}
               </div>
-            )}
+            </div>
           </div>
 
-          {/* Middle: Editable Form */}
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 overflow-y-auto max-h-[88vh]">
-            <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-4">
-              Property Details
-            </h3>
+          {/* Right: Property Details + Map */}
+          <div className="space-y-4">
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 overflow-y-auto max-h-[88vh]">
+              <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-4">
+                Property Details
+              </h3>
             <form onSubmit={handleSubmit((data) => setOmData(data))} className="space-y-3.5">
               <Field label="Address" name="address" register={register} />
               <Field label="Price" name="price" register={register} type="number" />
@@ -283,16 +267,38 @@ export default function ReviewPage() {
                 Save Changes
               </button>
             </form>
-          </div>
-
-          {/* Right: PDF Viewer */}
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 overflow-hidden flex flex-col">
-            <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3">
-              PDF Preview
-            </h3>
-            <div className="flex-1 min-h-0" style={{ height: '82vh' }}>
-              <PDFViewer url={pdfBlobUrl} />
             </div>
+
+            {/* Map */}
+            {geo && (
+              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+                <div className="flex items-center gap-1 mb-2">
+                  <MapPin className="w-3.5 h-3.5 text-gray-400" />
+                  <p className="text-xs font-medium text-gray-400 uppercase tracking-wider">Location</p>
+                </div>
+                <p className="text-xs text-gray-600 font-mono mb-2">
+                  {geo.lat.toFixed(6)}, {geo.lng.toFixed(6)}
+                </p>
+                <div className="rounded-xl overflow-hidden border border-gray-200">
+                  <iframe
+                    title="Property Location"
+                    width="100%"
+                    height="200"
+                    style={{ border: 0 }}
+                    loading="lazy"
+                    src={`https://www.openstreetmap.org/export/embed.html?bbox=${geo.lng - 0.008},${geo.lat - 0.005},${geo.lng + 0.008},${geo.lat + 0.005}&layer=mapnik&marker=${geo.lat},${geo.lng}`}
+                  />
+                </div>
+                <a
+                  href={`https://www.openstreetmap.org/?mlat=${geo.lat}&mlon=${geo.lng}#map=16/${geo.lat}/${geo.lng}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[10px] text-blue-500 hover:underline mt-1 block"
+                >
+                  Open full map &rarr;
+                </a>
+              </div>
+            )}
           </div>
         </div>
       </div>
