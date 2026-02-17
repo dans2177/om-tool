@@ -25,13 +25,16 @@ export async function extractImagesFromPDF(
 ): Promise<ExtractedImageInfo[]> {
   // Polyfill DOM globals BEFORE loading pdfjs-dist
   ensurePolyfills();
-  const pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.mjs') as any;
 
-  // Disable worker — not available in Vercel serverless
-  pdfjsLib.GlobalWorkerOptions.workerSrc = '';
-  if (typeof pdfjsLib.GlobalWorkerOptions.workerPort !== 'undefined') {
-    pdfjsLib.GlobalWorkerOptions.workerPort = null;
+  // Pre-load the worker onto globalThis so pdfjs-dist finds it on the main
+  // thread and never tries to dynamically import pdf.worker.mjs (which is
+  // missing from Vercel's serverless bundle).
+  if (!(globalThis as any).pdfjsWorker) {
+    const workerModule = await import('pdfjs-dist/legacy/build/pdf.worker.mjs') as any;
+    (globalThis as any).pdfjsWorker = workerModule;
   }
+
+  const pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.mjs') as any;
 
   const images: ExtractedImageInfo[] = [];
 
@@ -39,14 +42,12 @@ export async function extractImagesFromPDF(
   const pdfDoc = await PDFDocument.load(pdfBuffer);
   const pageCount = pdfDoc.getPageCount();
 
-  // Load with pdfjs-dist for rendering (isEvalSupported: false avoids eval in serverless)
+  // Load with pdfjs-dist for rendering
   const uint8 = new Uint8Array(pdfBuffer);
   const loadingTask = pdfjsLib.getDocument({
     data: uint8,
     useSystemFonts: true,
     isEvalSupported: false,
-    useWorkerFetch: false,
-    disableAutoFetch: true,
   });
   const pdfJsDoc = await loadingTask.promise;
 

@@ -2,6 +2,9 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   serverExternalPackages: ['sharp', 'pdf-parse', 'pdfjs-dist', '@napi-rs/canvas'],
+  outputFileTracingIncludes: {
+    '/api/phase1/extract': ['./node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs'],
+  },
   images: {
     remotePatterns: [
       {
