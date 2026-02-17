@@ -18,6 +18,7 @@ export async function POST(req: NextRequest) {
         return {
           allowedContentTypes: ['application/pdf'],
           maximumSizeInBytes: 100 * 1024 * 1024, // 100MB max
+          addRandomSuffix: true,
         };
       },
       onUploadCompleted: async () => {
