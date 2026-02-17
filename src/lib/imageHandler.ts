@@ -27,15 +27,27 @@ export async function extractImagesFromPDF(
   ensurePolyfills();
   const pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.mjs') as any;
 
+  // Disable worker — not available in Vercel serverless
+  pdfjsLib.GlobalWorkerOptions.workerSrc = '';
+  if (typeof pdfjsLib.GlobalWorkerOptions.workerPort !== 'undefined') {
+    pdfjsLib.GlobalWorkerOptions.workerPort = null;
+  }
+
   const images: ExtractedImageInfo[] = [];
 
   // Load with pdf-lib to find image XObjects
   const pdfDoc = await PDFDocument.load(pdfBuffer);
   const pageCount = pdfDoc.getPageCount();
 
-  // Load with pdfjs-dist for rendering
+  // Load with pdfjs-dist for rendering (isEvalSupported: false avoids eval in serverless)
   const uint8 = new Uint8Array(pdfBuffer);
-  const loadingTask = pdfjsLib.getDocument({ data: uint8, useSystemFonts: true });
+  const loadingTask = pdfjsLib.getDocument({
+    data: uint8,
+    useSystemFonts: true,
+    isEvalSupported: false,
+    useWorkerFetch: false,
+    disableAutoFetch: true,
+  });
   const pdfJsDoc = await loadingTask.promise;
 
   let imgIndex = 0;
