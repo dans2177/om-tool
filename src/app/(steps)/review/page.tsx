@@ -248,18 +248,13 @@ export default function ReviewPage() {
     router.push('/');
   };
 
-  const handleDownload = async (url: string, filename: string) => {
-    try {
-      const res = await fetch(url);
-      const blob = await res.blob();
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = filename;
-      a.click();
-      URL.revokeObjectURL(a.href);
-    } catch {
-      window.open(url, '_blank');
-    }
+  const handleDownload = (url: string, filename: string) => {
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.target = '_blank';
+    a.rel = 'noopener noreferrer';
+    a.click();
   };
 
   const addAgent = () => {
@@ -872,11 +867,10 @@ export default function ReviewPage() {
                 {selectedDownloads.size > 0 && (
                   <button
                     type="button"
-                    onClick={async () => {
+                    onClick={() => {
                       for (const key of selectedDownloads) {
                         const [url, name] = key.split('|||');
-                        await handleDownload(url, name);
-                        await new Promise(r => setTimeout(r, 400));
+                        handleDownload(url, name);
                       }
                       setSelectedDownloads(new Set());
                     }}
