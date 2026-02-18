@@ -55,7 +55,7 @@ export async function extractImagesFromPDF(
   const seenHashes = new Set<string>();
 
   // Collect raw image data from all pages first, then batch-upload
-  interface RawImage { pngBuffer: Buffer; w: number; h: number; idx: number; }
+  interface RawImage { jpgBuffer: Buffer; w: number; h: number; idx: number; }
   const pending: RawImage[] = [];
 
   for (let pageNum = 1; pageNum <= pageCount; pageNum++) {
@@ -86,21 +86,21 @@ export async function extractImagesFromPDF(
           if (seenHashes.has(key)) continue;
           seenHashes.add(key);
 
-          let pngBuffer: Buffer;
+          let jpgBuffer: Buffer;
 
           if (imgData.data.length === w * h * 4) {
-            pngBuffer = await sharp(Buffer.from(imgData.data), {
+            jpgBuffer = await sharp(Buffer.from(imgData.data), {
               raw: { width: w, height: h, channels: 4 },
-            }).png().toBuffer();
+            }).jpeg({ quality: 85 }).toBuffer();
           } else if (imgData.data.length === w * h * 3) {
-            pngBuffer = await sharp(Buffer.from(imgData.data), {
+            jpgBuffer = await sharp(Buffer.from(imgData.data), {
               raw: { width: w, height: h, channels: 3 },
-            }).png().toBuffer();
+            }).jpeg({ quality: 85 }).toBuffer();
           } else {
             continue;
           }
 
-          pending.push({ pngBuffer, w, h, idx: imgIndex++ });
+          pending.push({ jpgBuffer, w, h, idx: imgIndex++ });
         } catch {
           continue;
         }
@@ -115,13 +115,13 @@ export async function extractImagesFromPDF(
   for (let b = 0; b < pending.length; b += BATCH) {
     const batch = pending.slice(b, b + BATCH);
     const results = await Promise.all(
-      batch.map(async ({ pngBuffer, w, h, idx }) => {
+      batch.map(async ({ jpgBuffer, w, h, idx }) => {
         const [blob, thumbBlob] = await Promise.all([
-          put(`${slug}/images/extracted-${idx}.png`, pngBuffer, {
-            access: 'public', contentType: 'image/png',
+          put(`${slug}/images/extracted-${idx}.jpg`, jpgBuffer, {
+            access: 'public', contentType: 'image/jpeg',
             addRandomSuffix: false, allowOverwrite: true,
           }),
-          sharp(pngBuffer).resize({ width: 200 }).jpeg({ quality: 60 }).toBuffer()
+          sharp(jpgBuffer).resize({ width: 200 }).jpeg({ quality: 60 }).toBuffer()
             .then((tb) => put(`${slug}/images/thumb-${idx}.jpg`, tb, {
               access: 'public', contentType: 'image/jpeg',
               addRandomSuffix: false, allowOverwrite: true,
