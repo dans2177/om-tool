@@ -52,6 +52,11 @@ export async function extractImagesFromPDF(
   const pdfJsDoc = await loadingTask.promise;
 
   let imgIndex = 0;
+  const seenHashes = new Set<string>();
+
+  // Collect raw image data from all pages first, then batch-upload
+  interface RawImage { pngBuffer: Buffer; w: number; h: number; idx: number; }
+  const pending: RawImage[] = [];
 
   for (let pageNum = 1; pageNum <= pageCount; pageNum++) {
     const page = await pdfJsDoc.getPage(pageNum);
@@ -70,67 +75,63 @@ export async function extractImagesFromPDF(
           const w = imgData.width;
           const h = imgData.height;
 
-          // Skip tiny images (icons, dots, etc.)
-          if (w < 50 || h < 50) continue;
+          // Skip tiny images (icons, dots, logos etc.)
+          if (w < 80 || h < 80) continue;
+
+          // Quick content hash to deduplicate identical images
+          const sample = imgData.data.slice(0, 512);
+          let hash = 0;
+          for (let j = 0; j < sample.length; j++) hash = ((hash << 5) - hash + sample[j]) | 0;
+          const key = `${w}x${h}-${hash}`;
+          if (seenHashes.has(key)) continue;
+          seenHashes.add(key);
 
           let pngBuffer: Buffer;
 
           if (imgData.data.length === w * h * 4) {
-            // RGBA data
             pngBuffer = await sharp(Buffer.from(imgData.data), {
               raw: { width: w, height: h, channels: 4 },
-            })
-              .png()
-              .toBuffer();
+            }).png().toBuffer();
           } else if (imgData.data.length === w * h * 3) {
-            // RGB data
             pngBuffer = await sharp(Buffer.from(imgData.data), {
               raw: { width: w, height: h, channels: 3 },
-            })
-              .png()
-              .toBuffer();
+            }).png().toBuffer();
           } else {
             continue;
           }
 
-          const filename = `${slug}/images/extracted-${imgIndex}.png`;
-          const blob = await put(filename, pngBuffer, {
-            access: 'public',
-            contentType: 'image/png',
-            addRandomSuffix: false,
-            allowOverwrite: true,
-          });
-
-          // Generate thumbnail (200px wide) for fast previews
-          const thumbBuffer = await sharp(pngBuffer)
-            .resize({ width: 200 })
-            .jpeg({ quality: 60 })
-            .toBuffer();
-          const thumbFilename = `${slug}/images/thumb-${imgIndex}.jpg`;
-          const thumbBlob = await put(thumbFilename, thumbBuffer, {
-            access: 'public',
-            contentType: 'image/jpeg',
-            addRandomSuffix: false,
-            allowOverwrite: true,
-          });
-
-          images.push({
-            id: `img-${imgIndex}`,
-            blobUrl: blob.url,
-            thumbnailUrl: thumbBlob.url,
-            width: w,
-            height: h,
-          });
-          imgIndex++;
-          if (onProgress) await onProgress(imgIndex);
+          pending.push({ pngBuffer, w, h, idx: imgIndex++ });
         } catch {
-          // Skip images that can't be decoded
           continue;
         }
       }
     }
 
     page.cleanup();
+  }
+
+  // Batch-upload in parallel (10 at a time)
+  const BATCH = 10;
+  for (let b = 0; b < pending.length; b += BATCH) {
+    const batch = pending.slice(b, b + BATCH);
+    const results = await Promise.all(
+      batch.map(async ({ pngBuffer, w, h, idx }) => {
+        const [blob, thumbBlob] = await Promise.all([
+          put(`${slug}/images/extracted-${idx}.png`, pngBuffer, {
+            access: 'public', contentType: 'image/png',
+            addRandomSuffix: false, allowOverwrite: true,
+          }),
+          sharp(pngBuffer).resize({ width: 200 }).jpeg({ quality: 60 }).toBuffer()
+            .then((tb) => put(`${slug}/images/thumb-${idx}.jpg`, tb, {
+              access: 'public', contentType: 'image/jpeg',
+              addRandomSuffix: false, allowOverwrite: true,
+            })),
+        ]);
+        return { id: `img-${idx}`, blobUrl: blob.url, thumbnailUrl: thumbBlob.url, width: w, height: h };
+      })
+    );
+    images.push(...results);
+    if (onProgress) await onProgress(images.length);
   }
 
   return images;

@@ -3,7 +3,7 @@ import { ensurePolyfills } from '@/lib/ensurePolyfills';
 import { parseOM } from '@/lib/aiParser';
 import { lookupBOR } from '@/lib/borLookup';
 
-export const maxDuration = 120;
+export const maxDuration = 300;
 export const dynamic = 'force-dynamic';
 
 function sseMessage(event: string, data: any): string {

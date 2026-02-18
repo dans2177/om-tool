@@ -8,7 +8,7 @@ import {
   lockPDF,
 } from '@/lib/imageHandler';
 
-export const maxDuration = 120;
+export const maxDuration = 300;
 export const dynamic = 'force-dynamic';
 
 interface ImageInput {
@@ -59,62 +59,67 @@ export async function POST(req: NextRequest) {
       hasRepPhoto: boolean;
     }[] = [];
 
-    for (let i = 0; i < selectedImages.length; i++) {
-      const img = selectedImages[i];
-      let imgBuffer = await downloadImage(img.blobUrl);
+    // Process images in parallel batches of 5
+    const BATCH = 5;
+    for (let b = 0; b < selectedImages.length; b += BATCH) {
+      const batch = selectedImages.slice(b, b + BATCH);
+      const batchResults = await Promise.all(
+        batch.map(async (img, batchIdx) => {
+          const i = b + batchIdx;
+          let imgBuffer = await downloadImage(img.blobUrl);
 
-      // Compress if requested
-      let originalBuffer = compress
-        ? await compressImage(imgBuffer, 80)
-        : imgBuffer;
+          let originalBuffer = compress
+            ? await compressImage(imgBuffer, 80)
+            : imgBuffer;
 
-      const ext = compress ? 'jpg' : 'png';
-      const contentType = compress ? 'image/jpeg' : 'image/png';
-      const originalFilename = `${slug}/final/image-${i}.${ext}`;
+          const ext = compress ? 'jpg' : 'png';
+          const contentType = compress ? 'image/jpeg' : 'image/png';
+          const originalFilename = `${slug}/final/image-${i}.${ext}`;
 
-      const originalBlob = await put(originalFilename, originalBuffer, {
-        access: 'public',
-        contentType,
-        addRandomSuffix: false,
-        allowOverwrite: true,
-      });
+          const originalBlob = await put(originalFilename, originalBuffer, {
+            access: 'public',
+            contentType,
+            addRandomSuffix: false,
+            allowOverwrite: true,
+          });
 
-      let watermarkedUrl: string | undefined;
+          let watermarkedUrl: string | undefined;
 
-      if (img.watermark || img.repPhoto) {
-        let watermarked = imgBuffer;
+          if (img.watermark || img.repPhoto) {
+            let watermarked = imgBuffer;
 
-        // Apply logo watermark (bottom-right)
-        if (img.watermark) {
-          watermarked = await watermarkImage(watermarked, img.watermark);
-        }
+            if (img.watermark) {
+              watermarked = await watermarkImage(watermarked, img.watermark);
+            }
 
-        // Apply "Representative Photo" text (bottom-left)
-        if (img.repPhoto) {
-          watermarked = await repPhotoWatermark(watermarked, img.watermark || 'white');
-        }
+            if (img.repPhoto) {
+              watermarked = await repPhotoWatermark(watermarked, img.watermark || 'white');
+            }
 
-        if (compress) {
-          watermarked = await compressImage(watermarked, 80);
-        }
+            if (compress) {
+              watermarked = await compressImage(watermarked, 80);
+            }
 
-        const wmFilename = `${slug}/final/image-${i}-watermarked.${ext}`;
-        const wmBlob = await put(wmFilename, watermarked, {
-          access: 'public',
-          contentType,
-          addRandomSuffix: false,
-          allowOverwrite: true,
-        });
-        watermarkedUrl = wmBlob.url;
-      }
+            const wmFilename = `${slug}/final/image-${i}-watermarked.${ext}`;
+            const wmBlob = await put(wmFilename, watermarked, {
+              access: 'public',
+              contentType,
+              addRandomSuffix: false,
+              allowOverwrite: true,
+            });
+            watermarkedUrl = wmBlob.url;
+          }
 
-      finalImages.push({
-        originalUrl: originalBlob.url,
-        watermarkedUrl,
-        filename: `image-${i}.${ext}`,
-        hasWatermark: !!img.watermark,
-        hasRepPhoto: !!img.repPhoto,
-      });
+          return {
+            originalUrl: originalBlob.url,
+            watermarkedUrl,
+            filename: `image-${i}.${ext}`,
+            hasWatermark: !!img.watermark,
+            hasRepPhoto: !!img.repPhoto,
+          };
+        })
+      );
+      finalImages.push(...batchResults);
     }
 
     // 3. Clean up unselected original blobs (fire-and-forget)
