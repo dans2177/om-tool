@@ -55,6 +55,14 @@ export default function ApprovalPage() {
     );
   };
 
+  const toggleRepPhoto = (id: string) => {
+    setImages((prev) =>
+      prev.map((img) =>
+        img.id === id ? { ...img, repPhoto: !img.repPhoto } : img
+      )
+    );
+  };
+
   const uploadExtraImages = async (files: FileList) => {
     if (!omData) return;
     setLoading(true);
@@ -62,7 +70,7 @@ export default function ApprovalPage() {
 
     try {
       const formData = new FormData();
-      formData.append('slug', omData.slug);
+      formData.append('slug', omData.seo?.slug || 'unknown');
       Array.from(files).forEach((f) => formData.append('images', f));
 
       const res = await fetch('/api/phase1/upload-extra', {
@@ -78,6 +86,7 @@ export default function ApprovalPage() {
             ...img,
             selected: true,
             watermark: false as const,
+            repPhoto: false,
           })),
         ]);
       }
@@ -108,7 +117,7 @@ export default function ApprovalPage() {
       try {
         for (const [imageId, blob] of croppedBlobs.entries()) {
           const formData = new FormData();
-          formData.append('slug', omData?.slug || 'unknown');
+          formData.append('slug', omData?.seo?.slug || 'unknown');
           formData.append('imageId', imageId);
           formData.append('file', blob, `${imageId}.jpg`);
 
@@ -159,7 +168,7 @@ export default function ApprovalPage() {
         body: JSON.stringify({
           images: currentImages,
           pdfBlobUrl,
-          slug: omData?.slug || 'unknown',
+          slug: omData?.seo?.slug || 'unknown',
           compress,
         }),
       });
@@ -296,6 +305,15 @@ export default function ApprovalPage() {
                         className="rounded border-gray-300 text-blue-600"
                       />
                       Watermark
+                    </label>
+                    <label className="flex items-center gap-2 text-sm cursor-pointer text-gray-600">
+                      <input
+                        type="checkbox"
+                        checked={!!img.repPhoto}
+                        onChange={() => toggleRepPhoto(img.id)}
+                        className="rounded border-gray-300 text-blue-600"
+                      />
+                      Rep. Photo
                     </label>
                     {img.watermark && (
                       <div className="flex gap-1.5 ml-6">

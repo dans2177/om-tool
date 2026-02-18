@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server';
 import { ensurePolyfills } from '@/lib/ensurePolyfills';
 import { parseOM } from '@/lib/aiParser';
+import { lookupBOR } from '@/lib/borLookup';
 
 export const maxDuration = 120;
 export const dynamic = 'force-dynamic';
@@ -67,17 +68,33 @@ export async function POST(req: NextRequest) {
       await send('progress', { step: 'text-done', message: `✅ Text extracted — ${charCount} characters across ${pageCount} pages` });
 
       // 3. AI analysis
-      await send('progress', { step: 'ai', message: '🤖 Sending to AI for analysis (gpt-4o-mini)...' });
+      await send('progress', { step: 'ai', message: '🤖 Sending to AI for analysis (gpt-4.1)...' });
       const omData = await parseOM(rawText, notes || undefined);
-      await send('progress', { step: 'ai-done', message: `✅ AI complete — identified "${omData.address || 'unknown address'}"` });
+      await send('progress', { step: 'ai-done', message: `✅ AI complete — identified "${omData.address?.full_address || omData.title || 'unknown address'}"` });
 
-      if (omData.price) {
-        await send('progress', { step: 'ai-detail', message: `💰 Price: $${omData.price.toLocaleString()} | Cap Rate: ${omData.capRate ?? 'N/A'}%` });
+      if (omData.financials.price) {
+        await send('progress', { step: 'ai-detail', message: `💰 Price: ${omData.financials.price_display} | Cap Rate: ${omData.financials.cap_rate_percent ?? 'N/A'}%` });
       }
       if (omData.tenants && omData.tenants.length > 0) {
         await send('progress', { step: 'ai-tenants', message: `🏪 Tenants: ${omData.tenants.join(', ')}` });
       }
-      await send('progress', { step: 'ai-type', message: `🏷️ Type: ${omData.propertyType.toUpperCase()} | ${omData.saleOrLease}` });
+      await send('progress', { step: 'ai-type', message: `🏷️ Type: ${omData.record_type.toUpperCase()} | ${omData.saleOrLease}` });
+
+      // 3b. Broker of Record lookup
+      const brokerOfRecord = lookupBOR(omData.address?.state_abbr);
+      if (brokerOfRecord) {
+        await send('progress', { step: 'bor', message: `🏢 Broker of Record: ${brokerOfRecord.name} (${omData.address?.state_abbr})` });
+        // Remove any listing agents whose name matches the BOR
+        const borNameLower = brokerOfRecord.name.toLowerCase().trim();
+        omData.listing_agents = omData.listing_agents.filter(
+          (a: any) => a.name?.toLowerCase().trim() !== borNameLower
+        );
+      }
+
+      if (omData.listing_agents.length > 0) {
+        const agentNames = omData.listing_agents.map(a => a.name).filter(Boolean).join(', ');
+        await send('progress', { step: 'agents', message: `👤 Agents: ${agentNames}` });
+      }
 
       // 4. Image extraction (optional)
       let images: any[] = [];
@@ -85,7 +102,7 @@ export async function POST(req: NextRequest) {
         await send('progress', { step: 'images', message: '🖼️ Scanning PDF for embedded images...' });
         const extractedImages = await extractImagesFromPDF(
           pdfBuffer,
-          omData.slug || 'unknown',
+          omData.seo?.slug || 'unknown',
           async (count: number) => {
             await send('progress', { step: 'images-progress', message: `🖼️ Found ${count} image${count !== 1 ? 's' : ''} so far...` });
           }
@@ -101,10 +118,12 @@ export async function POST(req: NextRequest) {
 
       await send('result', {
         omData,
+        brokerOfRecord,
         images: images.map((img) => ({
           ...img,
           selected: false,
           watermark: false,
+          repPhoto: false,
         })),
         pdfBlobUrl: blobUrl,
         rawText: rawText.slice(0, 2000),

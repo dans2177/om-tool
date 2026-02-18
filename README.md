@@ -47,7 +47,7 @@ npx vercel --prod
 - TypeScript
 - Tailwind CSS
 - Vercel Blob (file storage)
-- OpenAI gpt-4o-mini (data extraction)
+- OpenAI gpt-4.1 (data extraction)
 - OpenCage (geocoding)
 - pdf-parse + pdfjs-dist + pdf-lib (PDF processing)
 - Sharp (image processing)

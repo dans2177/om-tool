@@ -1,7 +1,7 @@
 'use client';
 
 import { createContext, useContext, useState, useCallback, type ReactNode } from 'react';
-import type { OMData, ExtractedImage, FinalizedImage, GeoResult } from '@/types';
+import type { OMData, ExtractedImage, FinalizedImage, GeoResult, BrokerOfRecord } from '@/types';
 import type { ProgressStep } from '@/components/LoadingOverlay';
 
 interface OMContextType {
@@ -31,6 +31,8 @@ interface OMContextType {
   setPdfBlobUrl: (v: string) => void;
   geo: GeoResult | null;
   setGeo: (v: GeoResult | null) => void;
+  brokerOfRecord: BrokerOfRecord | null;
+  setBrokerOfRecord: (v: BrokerOfRecord | null) => void;
 
   // Approval
   compress: boolean;
@@ -48,6 +50,10 @@ interface OMContextType {
 
   // Reset for new OM
   resetAll: () => void;
+
+  // Snapshot save/restore
+  saveSnapshot: () => Promise<void>;
+  restoreSnapshot: (snapshotUrl: string) => Promise<boolean>;
 }
 
 const OMContext = createContext<OMContextType | null>(null);
@@ -64,6 +70,7 @@ export function OMProvider({ children }: { children: ReactNode }) {
   const [images, setImages] = useState<ExtractedImage[]>([]);
   const [pdfBlobUrl, setPdfBlobUrl] = useState('');
   const [geo, setGeo] = useState<GeoResult | null>(null);
+  const [brokerOfRecord, setBrokerOfRecord] = useState<BrokerOfRecord | null>(null);
 
   const [compress, setCompress] = useState(true);
   const [password, setPassword] = useState('');
@@ -87,11 +94,52 @@ export function OMProvider({ children }: { children: ReactNode }) {
     setImages([]);
     setPdfBlobUrl('');
     setGeo(null);
+    setBrokerOfRecord(null);
     setCompress(true);
     setPassword('');
     setLightboxImg(null);
     setLockedPdfUrl('');
     setFinalImages([]);
+  }, []);
+
+  const saveSnapshot = useCallback(async () => {
+    if (!omData) return;
+    try {
+      await fetch('/api/phase1/recent', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          omData,
+          pdfBlobUrl,
+          geo,
+          brokerOfRecord,
+          finalImages,
+          lockedPdfUrl,
+          images,
+        }),
+      });
+    } catch (e) {
+      console.error('Failed to save snapshot:', e);
+    }
+  }, [omData, pdfBlobUrl, geo, brokerOfRecord, finalImages, lockedPdfUrl, images]);
+
+  const restoreSnapshot = useCallback(async (snapshotUrl: string): Promise<boolean> => {
+    try {
+      const res = await fetch(snapshotUrl);
+      if (!res.ok) return false;
+      const data = await res.json();
+      if (data.omData) setOmData(data.omData);
+      if (data.pdfBlobUrl) setPdfBlobUrl(data.pdfBlobUrl);
+      if (data.geo) setGeo(data.geo);
+      if (data.brokerOfRecord) setBrokerOfRecord(data.brokerOfRecord);
+      if (data.finalImages) setFinalImages(data.finalImages);
+      if (data.lockedPdfUrl) setLockedPdfUrl(data.lockedPdfUrl);
+      if (data.images) setImages(data.images);
+      return true;
+    } catch (e) {
+      console.error('Failed to restore snapshot:', e);
+      return false;
+    }
   }, []);
 
   return (
@@ -106,12 +154,15 @@ export function OMProvider({ children }: { children: ReactNode }) {
         images, setImages,
         pdfBlobUrl, setPdfBlobUrl,
         geo, setGeo,
+        brokerOfRecord, setBrokerOfRecord,
         compress, setCompress,
         password, setPassword,
         lightboxImg, setLightboxImg,
         lockedPdfUrl, setLockedPdfUrl,
         finalImages, setFinalImages,
         resetAll,
+        saveSnapshot,
+        restoreSnapshot,
       }}
     >
       {children}

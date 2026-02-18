@@ -198,6 +198,40 @@ export async function watermarkImage(
 }
 
 /**
+ * Apply a "Representative Photo" text watermark to the bottom-left of an image.
+ * Stacks with the logo watermark (bottom-right).
+ */
+export async function repPhotoWatermark(
+  imageBuffer: Buffer,
+  color: 'white' | 'black' = 'white'
+): Promise<Buffer> {
+  const metadata = await sharp(imageBuffer).metadata();
+  const w = metadata.width || 800;
+  const h = metadata.height || 600;
+  const fontSize = Math.max(14, Math.floor(w / 40));
+
+  const fill = color === 'black' ? 'rgba(0,0,0,0.7)' : 'rgba(255,255,255,0.85)';
+  const shadow = color === 'black' ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.5)';
+
+  const svgText = `<svg width="${w}" height="${h}">
+    <defs>
+      <filter id="shadow" x="-5%" y="-5%" width="110%" height="110%">
+        <feDropShadow dx="1" dy="1" stdDeviation="2" flood-color="${shadow}" flood-opacity="0.8"/>
+      </filter>
+    </defs>
+    <text x="20" y="${h - 20}" font-size="${fontSize}" fill="${fill}"
+      text-anchor="start" font-family="Arial, Helvetica, sans-serif" font-weight="bold"
+      filter="url(#shadow)">
+      Representative Photo
+    </text>
+  </svg>`;
+
+  return sharp(imageBuffer)
+    .composite([{ input: Buffer.from(svgText), top: 0, left: 0 }])
+    .toBuffer();
+}
+
+/**
  * Download image from a blob URL and return as Buffer.
  */
 export async function downloadImage(url: string): Promise<Buffer> {

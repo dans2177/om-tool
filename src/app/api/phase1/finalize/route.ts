@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { put } from '@vercel/blob';
+import { put, del } from '@vercel/blob';
 import {
   downloadImage,
   compressImage,
   watermarkImage,
+  repPhotoWatermark,
   lockPDF,
 } from '@/lib/imageHandler';
 
@@ -15,6 +16,7 @@ interface ImageInput {
   blobUrl: string;
   selected: boolean;
   watermark: false | 'white' | 'black';
+  repPhoto?: boolean;
 }
 
 export async function POST(req: NextRequest) {
@@ -53,6 +55,8 @@ export async function POST(req: NextRequest) {
       originalUrl: string;
       watermarkedUrl?: string;
       filename: string;
+      hasWatermark: boolean;
+      hasRepPhoto: boolean;
     }[] = [];
 
     for (let i = 0; i < selectedImages.length; i++) {
@@ -77,8 +81,19 @@ export async function POST(req: NextRequest) {
 
       let watermarkedUrl: string | undefined;
 
-      if (img.watermark) {
-        let watermarked = await watermarkImage(imgBuffer, img.watermark);
+      if (img.watermark || img.repPhoto) {
+        let watermarked = imgBuffer;
+
+        // Apply logo watermark (bottom-right)
+        if (img.watermark) {
+          watermarked = await watermarkImage(watermarked, img.watermark);
+        }
+
+        // Apply "Representative Photo" text (bottom-left)
+        if (img.repPhoto) {
+          watermarked = await repPhotoWatermark(watermarked, img.watermark || 'white');
+        }
+
         if (compress) {
           watermarked = await compressImage(watermarked, 80);
         }
@@ -97,7 +112,19 @@ export async function POST(req: NextRequest) {
         originalUrl: originalBlob.url,
         watermarkedUrl,
         filename: `image-${i}.${ext}`,
+        hasWatermark: !!img.watermark,
+        hasRepPhoto: !!img.repPhoto,
       });
+    }
+
+    // 3. Clean up unselected original blobs (fire-and-forget)
+    const unselectedImages = images.filter((img) => !img.selected);
+    if (unselectedImages.length > 0) {
+      Promise.all(
+        unselectedImages.map((img) =>
+          del(img.blobUrl).catch(() => {})
+        )
+      ).catch(() => {});
     }
 
     return NextResponse.json({

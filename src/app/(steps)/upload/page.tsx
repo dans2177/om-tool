@@ -3,15 +3,16 @@
 import { useCallback, useRef, useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { upload } from '@vercel/blob/client';
-import { FileUp, X, Clock, ExternalLink, Trash2, ImagePlus } from 'lucide-react';
+import { FileUp, X, Clock, Trash2, ImagePlus, RotateCcw } from 'lucide-react';
 import { useOM } from '@/context/OMContext';
 import LoadingOverlay from '@/components/LoadingOverlay';
 
-interface RecentOM {
-  name: string;
-  url: string;
-  uploadedAt: string;
-  size: number;
+interface RecentSnapshot {
+  title: string;
+  address: string;
+  pdfBlobUrl: string;
+  savedAt: string;
+  snapshotUrl: string;
 }
 
 export default function UploadPage() {
@@ -23,24 +24,27 @@ export default function UploadPage() {
     addStep,
     error, setError,
     notes, setNotes,
-    setOmData, setImages, setPdfBlobUrl, setGeo,
+    setOmData, setImages, setPdfBlobUrl, setGeo, setBrokerOfRecord,
     resetAll,
+    saveSnapshot,
+    restoreSnapshot,
   } = useOM();
 
   const [dragOver, setDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
-  const [recentOMs, setRecentOMs] = useState<RecentOM[]>([]);
+  const [recentSnapshots, setRecentSnapshots] = useState<RecentSnapshot[]>([]);
   const [dumping, setDumping] = useState(false);
+  const [restoringIdx, setRestoringIdx] = useState<number | null>(null);
   const [extractImages, setExtractImages] = useState(true);
   const [uploadedImages, setUploadedImages] = useState<File[]>([]);
 
-  // Load recent OMs on first render
+  // Load recent snapshots on first render
   useEffect(() => {
     fetch('/api/phase1/recent')
       .then((r) => r.json())
       .then((data) => {
-        if (data.oms) setRecentOMs(data.oms);
+        if (data.snapshots) setRecentSnapshots(data.snapshots);
       })
       .catch(() => {});
   }, []);
@@ -52,7 +56,7 @@ export default function UploadPage() {
       const res = await fetch('/api/phase1/dump', { method: 'DELETE' });
       const data = await res.json();
       if (data.success) {
-        setRecentOMs([]);
+        setRecentSnapshots([]);
         resetAll();
         alert(`Wiped ${data.deleted} files from storage.`);
       } else {
@@ -143,13 +147,16 @@ export default function UploadPage() {
 
         setOmData(resultData.omData);
         setPdfBlobUrl(resultData.pdfBlobUrl);
+        if (resultData.brokerOfRecord) {
+          setBrokerOfRecord(resultData.brokerOfRecord);
+        }
 
         // If user uploaded images directly, upload those to blob storage
         let allImages = resultData.images || [];
         if (uploadedImages.length > 0) {
           addStep(`Uploading ${uploadedImages.length} image${uploadedImages.length !== 1 ? 's' : ''}...`);
           const imgFormData = new FormData();
-          imgFormData.append('slug', resultData.omData.slug || 'unknown');
+          imgFormData.append('slug', resultData.omData.seo?.slug || 'unknown');
           uploadedImages.forEach((f) => imgFormData.append('images', f));
 
           const imgRes = await fetch('/api/phase1/upload-extra', {
@@ -162,6 +169,7 @@ export default function UploadPage() {
               ...img,
               selected: true,
               watermark: false as const,
+              repPhoto: false,
             }));
             allImages = [...allImages, ...extras];
             addStep(`✅ ${extras.length} image${extras.length !== 1 ? 's' : ''} uploaded`);
@@ -171,13 +179,13 @@ export default function UploadPage() {
         setImages(allImages);
 
         // Geocode
-        if (resultData.omData.address) {
+        if (resultData.omData.address?.full_address) {
           addStep('Geocoding address...');
           try {
             const geoRes = await fetch('/api/phase1/geocode', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ address: resultData.omData.address }),
+              body: JSON.stringify({ address: resultData.omData.address.full_address }),
             });
             const geoData = await geoRes.json();
             if (geoData.lat && geoData.lng) {
@@ -191,6 +199,8 @@ export default function UploadPage() {
 
         addStep('Ready! Moving to image approval...');
         await new Promise((r) => setTimeout(r, 600));
+
+        // Auto-save snapshot
         router.push('/approval');
       } catch (err: any) {
         setError(err.message || 'Something went wrong');
@@ -198,7 +208,7 @@ export default function UploadPage() {
         setLoading(false);
       }
     },
-    [notes, extractImages, uploadedImages, addStep, setError, setLoading, setProgressSteps, setOmData, setImages, setPdfBlobUrl, setGeo, router]
+    [notes, extractImages, uploadedImages, addStep, setError, setLoading, setProgressSteps, setOmData, setImages, setPdfBlobUrl, setGeo, setBrokerOfRecord, router]
   );
 
   const onDrop = useCallback(
@@ -218,12 +228,6 @@ export default function UploadPage() {
     },
     [handleFile]
   );
-
-  const formatSize = (bytes: number) => {
-    if (bytes < 1024) return `${bytes} B`;
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-  };
 
   return (
     <>
@@ -352,37 +356,49 @@ export default function UploadPage() {
           </div>
         </div>
 
-        {/* Recent OMs */}
-        {recentOMs.length > 0 && (
+        {/* Recent snapshots */}
+        {recentSnapshots.length > 0 && (
           <div className="mt-8">
             <div className="flex items-center gap-2 mb-4">
               <Clock className="w-4 h-4 text-gray-400" />
               <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider">Recent OMs</h3>
             </div>
             <div className="space-y-2">
-              {recentOMs.slice(0, 10).map((om) => {
-                const name = om.name;
-                return (
-                  <a
-                    key={om.name}
-                    href={om.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-3 bg-white rounded-xl border border-gray-100 px-4 py-3 hover:border-gray-200 hover:shadow-sm transition-all group"
-                  >
-                    <div className="w-9 h-9 rounded-lg bg-red-50 flex items-center justify-center flex-shrink-0">
-                      <span className="text-xs font-bold text-red-400">PDF</span>
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-gray-700 truncate">{name}</p>
-                      <p className="text-xs text-gray-400">
-                        {new Date(om.uploadedAt).toLocaleDateString()} &middot; {formatSize(om.size)}
-                      </p>
-                    </div>
-                    <ExternalLink className="w-4 h-4 text-gray-300 group-hover:text-gray-500 transition-colors" />
-                  </a>
-                );
-              })}
+              {recentSnapshots.slice(0, 10).map((snap, idx) => (
+                <button
+                  key={snap.snapshotUrl}
+                  type="button"
+                  disabled={restoringIdx !== null}
+                  onClick={async () => {
+                    setRestoringIdx(idx);
+                    try {
+                      const ok = await restoreSnapshot(snap.snapshotUrl);
+                      setRestoringIdx(null);
+                      router.push(ok ? '/review' : '/');
+                    } catch {
+                      setRestoringIdx(null);
+                      router.push('/');
+                    }
+                  }}
+                  className="w-full flex items-center gap-3 bg-white rounded-xl border border-gray-100 px-4 py-3 hover:border-blue-200 hover:shadow-sm transition-all group text-left disabled:opacity-50"
+                >
+                  <div className="w-9 h-9 rounded-lg bg-blue-50 flex items-center justify-center flex-shrink-0">
+                    {restoringIdx === idx ? (
+                      <div className="w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
+                    ) : (
+                      <RotateCcw className="w-4 h-4 text-blue-500" />
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-700 truncate">{snap.title}</p>
+                    <p className="text-xs text-gray-400 truncate">
+                      {snap.address && <>{snap.address} &middot; </>}
+                      {new Date(snap.savedAt).toLocaleDateString()} {new Date(snap.savedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </p>
+                  </div>
+                  <span className="text-[10px] font-medium text-blue-500 opacity-0 group-hover:opacity-100 transition-opacity uppercase">Restore</span>
+                </button>
+              ))}
             </div>
           </div>
         )}
