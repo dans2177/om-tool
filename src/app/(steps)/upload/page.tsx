@@ -117,6 +117,7 @@ export default function UploadPage() {
         const decoder = new TextDecoder();
         let buffer = '';
         let resultData: any = null;
+        let streamedImages: any[] = [];
 
         while (true) {
           const { done, value } = await reader.read();
@@ -136,6 +137,10 @@ export default function UploadPage() {
                 addStep(data.message);
               } else if (eventType === 'result') {
                 resultData = data;
+              } else if (eventType === 'images') {
+                // Images arrive after the result event
+                streamedImages = [...streamedImages, ...(data.images || [])];
+                addStep(`🖼️ ${streamedImages.length} images ready`);
               } else if (eventType === 'error') {
                 throw new Error(data.error);
               }
@@ -151,8 +156,8 @@ export default function UploadPage() {
           setBrokerOfRecord(resultData.brokerOfRecord);
         }
 
-        // If user uploaded images directly, upload those to blob storage
-        let allImages = resultData.images || [];
+        // Merge images: result may have empty array, streamed images arrive separately
+        let allImages = [...(resultData.images || []), ...streamedImages];
         if (uploadedImages.length > 0) {
           addStep(`Uploading ${uploadedImages.length} image${uploadedImages.length !== 1 ? 's' : ''}...`);
           const imgFormData = new FormData();

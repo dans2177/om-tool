@@ -96,8 +96,16 @@ export async function POST(req: NextRequest) {
         await send('progress', { step: 'agents', message: `👤 Agents: ${agentNames}` });
       }
 
-      // 4. Image extraction (optional)
-      let images: any[] = [];
+      // 4. Send result immediately (before images) so client doesn't time out
+      await send('result', {
+        omData,
+        brokerOfRecord,
+        images: [],
+        pdfBlobUrl: blobUrl,
+        rawText: rawText.slice(0, 2000),
+      });
+
+      // 5. Image extraction (optional) — streamed in batches after result
       if (!skipImages) {
         await send('progress', { step: 'images', message: '🖼️ Scanning PDF for embedded images...' });
         const extractedImages = await extractImagesFromPDF(
@@ -107,27 +115,24 @@ export async function POST(req: NextRequest) {
             await send('progress', { step: 'images-progress', message: `🖼️ Found ${count} image${count !== 1 ? 's' : ''} so far...` });
           }
         );
-        images = extractedImages;
-        await send('progress', { step: 'images-done', message: `✅ ${images.length} image${images.length !== 1 ? 's' : ''} extracted & uploaded to cloud` });
+        // Send images in a single batch event
+        if (extractedImages.length > 0) {
+          await send('images', {
+            images: extractedImages.map((img) => ({
+              ...img,
+              selected: false,
+              watermark: false,
+              repPhoto: false,
+            })),
+          });
+        }
+        await send('progress', { step: 'images-done', message: `✅ ${extractedImages.length} image${extractedImages.length !== 1 ? 's' : ''} extracted & uploaded to cloud` });
       } else {
         await send('progress', { step: 'images-skip', message: '⏭️ Image extraction skipped' });
       }
 
-      // 5. Done
-      await send('progress', { step: 'complete', message: '🎉 Extraction complete! Loading results...' });
-
-      await send('result', {
-        omData,
-        brokerOfRecord,
-        images: images.map((img) => ({
-          ...img,
-          selected: false,
-          watermark: false,
-          repPhoto: false,
-        })),
-        pdfBlobUrl: blobUrl,
-        rawText: rawText.slice(0, 2000),
-      });
+      // 6. Done
+      await send('progress', { step: 'complete', message: '🎉 Extraction complete!' });
 
       await writer.close();
     } catch (error: any) {
