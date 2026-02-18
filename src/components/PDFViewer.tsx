@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { Document, Page, pdfjs } from 'react-pdf';
 import 'react-pdf/dist/Page/AnnotationLayer.css';
 import 'react-pdf/dist/Page/TextLayer.css';
-import { ChevronLeft, ChevronRight, ZoomIn, ZoomOut, RotateCcw } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ZoomIn, ZoomOut, RotateCcw, Layers } from 'lucide-react';
 
 // Configure PDF.js worker
 pdfjs.GlobalWorkerOptions.workerSrc = new URL(
@@ -17,15 +17,47 @@ interface PDFViewerProps {
 }
 
 export default function PDFViewer({ url }: PDFViewerProps) {
+  const [mode, setMode] = useState<'embed' | 'pages'>('embed');
   const [numPages, setNumPages] = useState<number>(0);
   const [pageNumber, setPageNumber] = useState(1);
   const [scale, setScale] = useState(1);
   const BASE_WIDTH = 500;
 
+  // Embed mode — browser's native PDF viewer (instant, streams)
+  if (mode === 'embed') {
+    return (
+      <div className="flex flex-col h-full">
+        <div className="flex items-center justify-end mb-2">
+          <button
+            onClick={() => setMode('pages')}
+            className="flex items-center gap-1 text-[11px] text-gray-400 hover:text-gray-600 transition-colors"
+            title="Switch to page-by-page view"
+          >
+            <Layers className="w-3.5 h-3.5" /> Page view
+          </button>
+        </div>
+        <iframe
+          src={`${url}#toolbar=1`}
+          title="PDF Preview"
+          className="flex-1 w-full rounded-lg border border-gray-200"
+          style={{ minHeight: 600 }}
+        />
+      </div>
+    );
+  }
+
+  // Pages mode — react-pdf with zoom + page nav
   return (
     <div className="flex flex-col h-full pdf-no-select">
       {/* Zoom controls */}
       <div className="flex items-center justify-center gap-1.5 mb-2">
+        <button
+          onClick={() => setMode('embed')}
+          className="p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors mr-2"
+          title="Switch to embedded viewer"
+        >
+          <Layers className="w-3.5 h-3.5" />
+        </button>
         <button
           onClick={() => setScale((s) => Math.max(0.5, +(s - 0.15).toFixed(2)))}
           className="p-1 rounded hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors"
