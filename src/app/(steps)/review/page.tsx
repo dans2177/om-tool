@@ -1002,6 +1002,17 @@ export default function ReviewPage() {
                         src={img.watermarkedUrl || img.originalUrl}
                         alt={cleanName}
                         className="w-full h-28 object-cover"
+                        onError={(e) => {
+                          const target = e.target as HTMLImageElement;
+                          const retries = Number(target.dataset.retries || '0');
+                          if (retries < 3) {
+                            target.dataset.retries = String(retries + 1);
+                            const base = img.watermarkedUrl || img.originalUrl;
+                            setTimeout(() => { target.src = base + `?t=${Date.now()}`; }, 800 * (retries + 1));
+                          } else if (img.watermarkedUrl && !target.src.includes(img.originalUrl)) {
+                            target.src = img.originalUrl + `?t=${Date.now()}`;
+                          }
+                        }}
                       />
                       <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center">
                         <ZoomIn className="w-5 h-5 text-white opacity-0 group-hover:opacity-100 transition-opacity" />

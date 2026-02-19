@@ -202,12 +202,12 @@ export async function watermarkImage(
     .png()
     .toBuffer();
 
-  // Reduce logo opacity to 50% by manipulating the raw alpha channel
+  // Reduce logo opacity to 90% by manipulating the raw alpha channel
   const { data: rawData, info: rawInfo } = await sharp(logoResized)
     .raw()
     .toBuffer({ resolveWithObject: true });
   for (let i = 3; i < rawData.length; i += 4) {
-    rawData[i] = Math.round(rawData[i] * 0.5);
+    rawData[i] = Math.round(rawData[i] * 0.9);
   }
   const logoBuffer = await sharp(rawData, {
     raw: { width: rawInfo.width, height: rawInfo.height, channels: 4 },
@@ -249,8 +249,8 @@ export async function repPhotoWatermark(
   const imgWidth = metadata.width || 800;
   const imgHeight = metadata.height || 600;
 
-  // Scale the pre-rendered text to ~30% of image width
-  const targetWidth = Math.max(120, Math.floor(imgWidth * 0.30));
+  // Scale the pre-rendered text to ~15% of image width
+  const targetWidth = Math.max(80, Math.floor(imgWidth * 0.15));
   const textOverlay = await sharp(repPath)
     .resize({ width: targetWidth })
     .png()

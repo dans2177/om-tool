@@ -306,10 +306,17 @@ export default function ApprovalPage() {
                     draggable={false}
                     loading="lazy"
                     onError={(e) => {
-                      // Fall back to full-size image if thumbnail fails
                       const target = e.target as HTMLImageElement;
-                      if (target.src !== img.blobUrl) {
-                        target.src = img.blobUrl;
+                      const retries = Number(target.dataset.retries || '0');
+                      const bust = `?t=${Date.now()}`;
+                      if (retries < 3) {
+                        // Retry same URL with cache-bust (CDN propagation)
+                        target.dataset.retries = String(retries + 1);
+                        const base = (retries === 0 ? img.thumbnailUrl : img.blobUrl) || img.blobUrl;
+                        setTimeout(() => { target.src = base + bust; }, 800 * (retries + 1));
+                      } else if (!target.src.includes(img.blobUrl)) {
+                        // Final fallback to full-size image
+                        target.src = img.blobUrl + bust;
                       }
                     }}
                   />
