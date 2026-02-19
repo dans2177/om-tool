@@ -1,7 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
+import { upload } from '@vercel/blob/client';
 import { Upload, Check, Eye, X, Image as ImageIcon } from 'lucide-react';
 import { useOM } from '@/context/OMContext';
 import LoadingOverlay from '@/components/LoadingOverlay';
@@ -24,12 +25,16 @@ export default function ApprovalPage() {
   } = useOM();
 
   const [showCropper, setShowCropper] = useState(false);
+  const extraInputRef = useRef<HTMLInputElement>(null);
 
-  // Redirect if no data
-  if (!omData) {
-    if (typeof window !== 'undefined' && !loading) {
+  // Redirect if no data (in useEffect to avoid setState-during-render warning)
+  useEffect(() => {
+    if (!omData && !loading) {
       router.push('/');
     }
+  }, [omData, loading, router]);
+
+  if (!omData) {
     return null;
   }
 
@@ -43,17 +48,13 @@ export default function ApprovalPage() {
     setImages((prev) =>
       prev.map((img) =>
         img.id === id
-          ? { ...img, watermark: img.watermark ? false as const : 'white' as const }
+          ? { ...img, watermark: !img.watermark }
           : img
       )
     );
   };
 
-  const setWatermarkColor = (id: string, color: 'white' | 'black') => {
-    setImages((prev) =>
-      prev.map((img) => (img.id === id ? { ...img, watermark: color } : img))
-    );
-  };
+
 
   const toggleRepPhoto = (id: string) => {
     setImages((prev) =>
@@ -65,18 +66,34 @@ export default function ApprovalPage() {
 
   const uploadExtraImages = async (files: FileList) => {
     if (!omData) return;
+    const slug = omData.seo?.slug || 'unknown';
     setLoading(true);
-    addStep('Uploading additional images...');
+    setProgressSteps([]);
+    addStep(`Uploading ${files.length} image${files.length !== 1 ? 's' : ''}...`);
 
     try {
-      const formData = new FormData();
-      formData.append('slug', omData.seo?.slug || 'unknown');
-      Array.from(files).forEach((f) => formData.append('images', f));
+      // Upload each image directly to Vercel Blob (bypasses 4.5 MB serverless limit)
+      const blobUrls: { url: string; name: string }[] = [];
+      for (const file of Array.from(files)) {
+        const blob = await upload(`${slug}/images/${file.name}`, file, {
+          access: 'public',
+          handleUploadUrl: '/api/phase1/upload-image',
+        });
+        blobUrls.push({ url: blob.url, name: file.name });
+      }
+      addStep(`✅ ${blobUrls.length} uploaded — generating thumbnails...`);
 
+      // Send blob URLs to the server for thumbnail generation + metadata
       const res = await fetch('/api/phase1/upload-extra', {
         method: 'POST',
-        body: formData,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ slug, blobUrls }),
       });
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || `Upload failed (${res.status})`);
+      }
 
       const data = await res.json();
       if (data.images) {
@@ -89,11 +106,14 @@ export default function ApprovalPage() {
             repPhoto: false,
           })),
         ]);
+        addStep(`✅ ${data.images.length} image${data.images.length !== 1 ? 's' : ''} ready`);
       }
-    } catch {
-      setError('Failed to upload extra images');
+    } catch (err: any) {
+      setError(err.message || 'Failed to upload extra images');
     } finally {
       setLoading(false);
+      // Reset file input so re-selecting the same files fires onChange
+      if (extraInputRef.current) extraInputRef.current.value = '';
     }
   };
 
@@ -245,11 +265,12 @@ export default function ApprovalPage() {
                 <Upload className="w-4 h-4" />
                 Add more
                 <input
+                  ref={extraInputRef}
                   type="file"
                   accept="image/*"
                   multiple
                   onChange={(e) => {
-                    if (e.target.files) uploadExtraImages(e.target.files);
+                    if (e.target.files && e.target.files.length > 0) uploadExtraImages(e.target.files);
                   }}
                   className="hidden"
                 />
@@ -284,6 +305,13 @@ export default function ApprovalPage() {
                     className="w-full h-48 object-cover"
                     draggable={false}
                     loading="lazy"
+                    onError={(e) => {
+                      // Fall back to full-size image if thumbnail fails
+                      const target = e.target as HTMLImageElement;
+                      if (target.src !== img.blobUrl) {
+                        target.src = img.blobUrl;
+                      }
+                    }}
                   />
                   <button
                     onClick={(e) => {
@@ -315,30 +343,7 @@ export default function ApprovalPage() {
                       />
                       Rep. Photo
                     </label>
-                    {img.watermark && (
-                      <div className="flex gap-1.5 ml-6">
-                        <button
-                          onClick={() => setWatermarkColor(img.id, 'white')}
-                          className={`px-2.5 py-1 text-xs rounded-lg font-medium transition-colors ${
-                            img.watermark === 'white'
-                              ? 'bg-gray-800 text-white'
-                              : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
-                          }`}
-                        >
-                          White
-                        </button>
-                        <button
-                          onClick={() => setWatermarkColor(img.id, 'black')}
-                          className={`px-2.5 py-1 text-xs rounded-lg font-medium transition-colors ${
-                            img.watermark === 'black'
-                              ? 'bg-gray-800 text-white'
-                              : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
-                          }`}
-                        >
-                          Black
-                        </button>
-                      </div>
-                    )}
+
                   </div>
                 )}
                 <div

@@ -67,9 +67,29 @@ export async function POST(req: NextRequest) {
       const charCount = rawText.length.toLocaleString();
       await send('progress', { step: 'text-done', message: `✅ Text extracted — ${charCount} characters across ${pageCount} pages` });
 
-      // 3. AI analysis
+      // 3. AI analysis + Image extraction — run in PARALLEL
+      // Use a temp slug from the filename so images have a unique storage path
+      const tempSlug = (fileName || 'doc').replace(/\.pdf$/i, '').replace(/[^a-zA-Z0-9-]/g, '-').slice(0, 60) + '-' + Date.now();
       await send('progress', { step: 'ai', message: '🤖 Sending to AI for analysis (gpt-4.1)...' });
-      const omData = await parseOM(rawText, notes || undefined);
+      if (!skipImages) {
+        await send('progress', { step: 'images', message: '🖼️ Scanning PDF for embedded images...' });
+      }
+
+      const aiPromise = parseOM(rawText, notes || undefined);
+
+      const imagePromise = !skipImages
+        ? extractImagesFromPDF(
+            pdfBuffer,
+            tempSlug,
+            async (count: number) => {
+              await send('progress', { step: 'images-progress', message: `🖼️ Found ${count} image${count !== 1 ? 's' : ''} so far...` });
+            }
+          )
+        : Promise.resolve(null);
+
+      // Wait for both to complete
+      const [omData, extractedImages] = await Promise.all([aiPromise, imagePromise]);
+
       await send('progress', { step: 'ai-done', message: `✅ AI complete — identified "${omData.address?.full_address || omData.title || 'unknown address'}"` });
 
       if (omData.financials.price) {
@@ -105,28 +125,19 @@ export async function POST(req: NextRequest) {
         rawText: rawText.slice(0, 2000),
       });
 
-      // 5. Image extraction (optional) — streamed in batches after result
-      if (!skipImages) {
-        await send('progress', { step: 'images', message: '🖼️ Scanning PDF for embedded images...' });
-        const extractedImages = await extractImagesFromPDF(
-          pdfBuffer,
-          omData.seo?.slug || 'unknown',
-          async (count: number) => {
-            await send('progress', { step: 'images-progress', message: `🖼️ Found ${count} image${count !== 1 ? 's' : ''} so far...` });
-          }
-        );
-        // Send images in a single batch event
-        if (extractedImages.length > 0) {
-          await send('images', {
-            images: extractedImages.map((img) => ({
-              ...img,
-              selected: false,
-              watermark: false,
-              repPhoto: false,
-            })),
-          });
-        }
+      // 5. Stream images (already extracted in parallel)
+      if (extractedImages && extractedImages.length > 0) {
+        await send('images', {
+          images: extractedImages.map((img) => ({
+            ...img,
+            selected: false,
+            watermark: false,
+            repPhoto: false,
+          })),
+        });
         await send('progress', { step: 'images-done', message: `✅ ${extractedImages.length} image${extractedImages.length !== 1 ? 's' : ''} extracted & uploaded to cloud` });
+      } else if (!skipImages) {
+        await send('progress', { step: 'images-done', message: '✅ 0 images extracted' });
       } else {
         await send('progress', { step: 'images-skip', message: '⏭️ Image extraction skipped' });
       }

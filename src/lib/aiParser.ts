@@ -22,7 +22,7 @@ Return this exact JSON structure:
 {
   "record_type": "<one of: stnl, sc, industrial, mf, leasing, hc, hospitality, self-storage, land, office, mixed-use, manufactured-housing>",
   "title": "<If single-tenant with recognizable brand (Dollar General, Walgreens, etc), use that brand name in Title Case. Else if shopping center/multi-tenant, use center name in Title Case. Else fallback to street number + street name in Title Case.>",
-  "saleOrLease": "<for-sale | for-lease>",
+  "saleOrLease": "<for-sale | for-lease | for-auction>",
 
   "address": {
     "street_number": "<e.g. 123>",
@@ -36,8 +36,8 @@ Return this exact JSON structure:
 
   "seo": {
     "seo_title": "<Title Case. Use title if available, else street number + street name.>",
-    "slug": "<Format: {record_type}-{title-or-addr-lowercased}-{city}-{state_abbr}. All lowercase, spaces to hyphens, no punctuation except hyphens. Examples: stnl-dollar-general-phoenix-az, sc-desert-ridge-marketplace-phoenix-az>",
-    "meta_description": "<MUST follow one of these two exact templates depending on saleOrLease. For sale: 'Now Available – {TITLE OR ADDRESS} in {City, State Abbr}. Listed by {First Agent Name}. Explore this property and Download the Offering Memorandum today.' For lease: 'Now Leasing – {TITLE OR ADDRESS} For Lease in {City, State Abbr}. Listed by {First Agent Name}. Explore this property and Download the Leasing Brochure today.' Use the property title if available, otherwise use the street address. Use the first listing agent's name.>"
+    "slug": "<Format: {record_type}-{title-or-addr-lowercased}-{city}-{state_abbr}. All lowercase, spaces to hyphens, no punctuation except hyphens. IMPORTANT: If saleOrLease is 'for-lease', ALWAYS use 'leasing' as the record_type prefix in the slug regardless of the actual record_type (e.g. 'leasing-warehouse-phoenix-az' not 'industrial-warehouse-phoenix-az'). Examples: stnl-dollar-general-phoenix-az, sc-desert-ridge-marketplace-phoenix-az, leasing-warehouse-phoenix-az>",
+    "meta_description": "<MUST follow one of these exact templates depending on saleOrLease. For sale: 'Now Available – {TITLE OR ADDRESS} in {City, State Abbr}. Listed by {First Agent Name}. Explore this property and Download the Offering Memorandum today.' For lease: 'Now Leasing – {TITLE OR ADDRESS} For Lease in {City, State Abbr}. Listed by {First Agent Name}. Explore this property and Download the Leasing Brochure today.' For auction: 'Now at Auction – {TITLE OR ADDRESS} in {City, State Abbr}. Listed by {First Agent Name}. Explore this property and Download the Offering Memorandum today.' Use the property title if available, otherwise use the street address. ALWAYS use the FIRST listing agent's full name.>"
   },
 
   "financials": {
@@ -103,6 +103,15 @@ Return this exact JSON structure:
     "rate": "<exactly as shown in OM, e.g. '$0.50/SF/Mo NNN'. null if not leasing>",
     "property_type": "<property type for lease listing. null if not leasing>"
   },
+
+  "lease": {
+    "lease_type": "<The lease structure type, e.g. NNN, NN, N, Gross, Modified Gross, Ground Lease. Extract whenever tenant/lease info exists, even on for-sale listings (important for NNN investment sales). null if not found.>",
+    "lease_price": "<The current rent the tenant pays, exactly as shown in the OM. e.g. '$2,500/mo', '$15.00/SF/Yr NNN', '$180,000/Yr'. This tells the buyer what income the tenant generates. null if not found.>",
+    "lease_commencement": "<Lease start/commencement date if found, any format. null if not found.>",
+    "lease_expiration": "<Lease expiration date if found, any format. null if not found.>"
+  },
+
+  "auction_link": null,
 
   "audit": {
     "missing_fields": ["<list field names you could NOT find in the OM>"],
@@ -203,6 +212,13 @@ export async function parseOM(rawText: string, notes?: string): Promise<OMData> 
       rate: raw.leasing_only?.rate || null,
       property_type: raw.leasing_only?.property_type || null,
     },
+    lease: {
+      lease_type: raw.lease?.lease_type || null,
+      lease_price: raw.lease?.lease_price || null,
+      lease_commencement: raw.lease?.lease_commencement || null,
+      lease_expiration: raw.lease?.lease_expiration || null,
+    },
+    auction_link: raw.auction_link || null,
     audit: {
       missing_fields: raw.audit?.missing_fields || [],
       assumptions: raw.audit?.assumptions || [],

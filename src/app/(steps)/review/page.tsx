@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Download, Eye, ZoomIn, X, ArrowLeft, MapPin, ChevronDown, ChevronRight, Plus, Trash2, Copy, Check } from 'lucide-react';
+import { Download, Eye, ZoomIn, X, ArrowLeft, MapPin, ChevronDown, ChevronRight, ChevronUp, Plus, Trash2, Copy, Check } from 'lucide-react';
 import { useOM } from '@/context/OMContext';
 import type { OMData, OMAgent } from '@/types';
 import { RECORD_TYPES } from '@/types';
@@ -17,7 +17,8 @@ const SECTION_COLORS: Record<string, string> = {
   'SEO': 'border-l-purple-500',
   'Financials': 'border-l-amber-500',
   'Size & Dates': 'border-l-cyan-500',
-  'Occupancy & Term': 'border-l-orange-500',
+  'Occupancy': 'border-l-orange-500',
+  'Lease Info': 'border-l-green-500',
   'Broker of Record': 'border-l-rose-500',
   'Descriptions': 'border-l-indigo-500',
   'LoopNet Highlights': 'border-l-lime-500',
@@ -248,13 +249,35 @@ export default function ReviewPage() {
     router.push('/');
   };
 
-  const handleDownload = (url: string, filename: string) => {
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    a.target = '_blank';
-    a.rel = 'noopener noreferrer';
-    a.click();
+  const handleDownload = async (url: string, filename: string) => {
+    try {
+      // Fetch as blob so we get a same-origin object URL — the browser
+      // ignores the `download` attribute on cross-origin hrefs (Vercel Blob CDN).
+      const res = await fetch(url);
+      const blob = await res.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = objectUrl;
+      a.download = filename;
+      a.style.display = 'none';
+      // Append to DOM — some Windows browsers require this for the
+      // `download` attribute / programmatic click to work properly.
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      // Clean up after a short delay so the download can start
+      setTimeout(() => URL.revokeObjectURL(objectUrl), 10000);
+    } catch {
+      // Fallback: still force a download via a DOM-attached anchor
+      // instead of window.open (which opens a new tab on Windows).
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      a.style.display = 'none';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    }
   };
 
   const addAgent = () => {
@@ -266,6 +289,20 @@ export default function ReviewPage() {
   const removeAgent = (idx: number) => {
     const copy = JSON.parse(JSON.stringify(omData)) as OMData;
     copy.listing_agents.splice(idx, 1);
+    setOmData(copy);
+  };
+
+  const moveAgentUp = (idx: number) => {
+    if (idx <= 0) return;
+    const copy = JSON.parse(JSON.stringify(omData)) as OMData;
+    [copy.listing_agents[idx - 1], copy.listing_agents[idx]] = [copy.listing_agents[idx], copy.listing_agents[idx - 1]];
+    setOmData(copy);
+  };
+
+  const moveAgentDown = (idx: number) => {
+    if (!omData || idx >= omData.listing_agents.length - 1) return;
+    const copy = JSON.parse(JSON.stringify(omData)) as OMData;
+    [copy.listing_agents[idx], copy.listing_agents[idx + 1]] = [copy.listing_agents[idx + 1], copy.listing_agents[idx]];
     setOmData(copy);
   };
 
@@ -332,6 +369,7 @@ export default function ReviewPage() {
             <Section title="Property Info" defaultOpen>
               <div className="grid grid-cols-2 gap-3">
                 <Field label="Title" value={omData.title} onChange={(v) => update('title', v)} fullWidth />
+                <Field label="SEO Title (auto)" value={`${omData.title || omData.address?.street || ''} - ${[omData.address?.city, omData.address?.state_abbr].filter(Boolean).join(', ')} | MATTHEWS`} fullWidth readOnly copyOverride={`${omData.title || omData.address?.street || ''} - ${[omData.address?.city, omData.address?.state_abbr].filter(Boolean).join(', ')} | MATTHEWS`} />
                 <div>
                   <label className="block text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-0.5">Record Type</label>
                   <select
@@ -353,8 +391,10 @@ export default function ReviewPage() {
                   >
                     <option value="for-sale">For Sale</option>
                     <option value="for-lease">For Lease</option>
+                    <option value="for-auction">For Auction</option>
                   </select>
                 </div>
+                <Field label="Auction Site Link (optional)" value={omData.auction_link} onChange={(v) => update('auction_link', v)} fullWidth placeholder="https://auction-site.com/listing" />
               </div>
               <Field label="Tenants" value={(omData.tenants || []).join(', ')} onChange={(v: string) => update('tenants', v.split(',').map((s: string) => s.trim()).filter(Boolean))} fullWidth />
             </Section>
@@ -468,27 +508,62 @@ export default function ReviewPage() {
               </div>
             </Section>
 
-            {/* ── Occupancy & Term ── */}
-            <Section title="Occupancy & Term" defaultOpen>
+            {/* ── Occupancy ── */}
+            <Section title="Occupancy" defaultOpen>
               <div className="grid grid-cols-2 gap-3">
                 <Field label="Occupancy %" value={omData.occupancy_rate_percent} onChange={(v) => update('occupancy_rate_percent', v)} type="number" step="0.1" />
-                <Field label="Term Remaining" value={omData.term_remaining} onChange={(v) => update('term_remaining', v)} placeholder="e.g. ± 12 Years" />
+              </div>
+            </Section>
+
+            {/* ── Lease Info ── */}
+            <Section title="Lease Info" defaultOpen>
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="Lease Type" value={omData.lease?.lease_type} onChange={(v) => update('lease.lease_type', v)} placeholder="e.g. NNN, Gross, Ground Lease" />
+                <Field label="Lease Price" value={omData.lease?.lease_price} onChange={(v) => update('lease.lease_price', v)} placeholder="e.g. $2,500/mo or $15.00/SF/Yr NNN" />
+                <Field label="Commencement Date" value={omData.lease?.lease_commencement} onChange={(v) => update('lease.lease_commencement', v)} placeholder="e.g. 01/2020" />
+                <Field label="Expiration Date" value={omData.lease?.lease_expiration} onChange={(v) => update('lease.lease_expiration', v)} placeholder="e.g. 12/2035" />
+                <Field label="Term Remaining" value={omData.term_remaining} onChange={(v) => update('term_remaining', v)} placeholder="e.g. ± 12 Years" fullWidth />
               </div>
             </Section>
 
             {/* ── Listing Agents ── */}
             <Section title={`Listing Agents (${(omData.listing_agents || []).filter(a => !brokerOfRecord || a.name?.toLowerCase().trim() !== brokerOfRecord.name.toLowerCase().trim()).length})`} defaultOpen>
+              <p className="text-[10px] text-gray-400 mb-1.5">First agent is used in SEO meta description. Use arrows to reorder.</p>
               <div className="space-y-2">
-                {(omData.listing_agents || []).map((agent, origIdx) => ({ agent, origIdx })).filter(({ agent }) => !brokerOfRecord || agent.name?.toLowerCase().trim() !== brokerOfRecord.name.toLowerCase().trim()).map(({ agent, origIdx }) => (
+                {(omData.listing_agents || []).map((agent, origIdx) => ({ agent, origIdx })).filter(({ agent }) => !brokerOfRecord || agent.name?.toLowerCase().trim() !== brokerOfRecord.name.toLowerCase().trim()).map(({ agent, origIdx }, filteredIdx, filteredArr) => (
                   <div key={origIdx} className="relative border border-blue-100 rounded-lg p-2.5 bg-blue-50/30 group/agent">
-                    <button
-                      type="button"
-                      onClick={() => removeAgent(origIdx)}
-                      className="absolute top-1.5 right-1.5 text-gray-300 hover:text-red-500 transition-colors opacity-0 group-hover/agent:opacity-100"
-                      title="Remove agent"
-                    >
-                      <Trash2 className="w-3 h-3" />
-                    </button>
+                    {/* Reorder + Remove controls */}
+                    <div className="absolute top-1.5 right-1.5 flex items-center gap-0.5 opacity-0 group-hover/agent:opacity-100 transition-opacity">
+                      <button
+                        type="button"
+                        onClick={() => moveAgentUp(origIdx)}
+                        disabled={filteredIdx === 0}
+                        className="text-gray-300 hover:text-blue-600 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                        title="Move up"
+                      >
+                        <ChevronUp className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => moveAgentDown(origIdx)}
+                        disabled={filteredIdx === filteredArr.length - 1}
+                        className="text-gray-300 hover:text-blue-600 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                        title="Move down"
+                      >
+                        <ChevronDown className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => removeAgent(origIdx)}
+                        className="text-gray-300 hover:text-red-500 transition-colors ml-0.5"
+                        title="Remove agent"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                    </div>
+                    {filteredIdx === 0 && (
+                      <span className="absolute top-1.5 left-2 text-[9px] font-bold text-blue-500 uppercase tracking-wider">Primary</span>
+                    )}
                     <div className="grid grid-cols-2 gap-1.5">
                       {([
                         ['Name', 'name', agent.name],
@@ -539,13 +614,13 @@ export default function ReviewPage() {
                   {/* Copy All bar */}
                   <div className="flex items-center justify-between px-3 py-1.5 bg-rose-100/60 border-b border-rose-200">
                     <span className="text-[10px] font-semibold text-rose-600 uppercase tracking-wider">State: {omData.address?.state_abbr}</span>
-                    <CopyBtn text={`${brokerOfRecord.name}\n${brokerOfRecord.company}\n${[brokerOfRecord.firm_number, brokerOfRecord.license_number].filter(Boolean).join(', ')}\n${brokerOfRecord.address}\n(866) 889-0550`} className="text-rose-400 hover:text-rose-700" />
+                    <CopyBtn text={`${brokerOfRecord.name}\n${brokerOfRecord.company}\nLicense # ${[brokerOfRecord.firm_number, brokerOfRecord.license_number].filter(Boolean).join(', ')}${omData.address?.state_abbr ? ` (${omData.address.state_abbr})` : ''}\n${brokerOfRecord.address}\n(866) 889-0550`} className="text-rose-400 hover:text-rose-700" />
                   </div>
                   <div className="px-3 py-2.5 space-y-1.5">
                     {[
                       { label: 'Name', value: brokerOfRecord.name, copy: brokerOfRecord.name },
                       { label: 'Company', value: brokerOfRecord.company, copy: brokerOfRecord.company },
-                      { label: 'Firm & License', value: [brokerOfRecord.firm_number, brokerOfRecord.license_number].filter(Boolean).join(', '), copy: [brokerOfRecord.firm_number, brokerOfRecord.license_number].filter(Boolean).join(', ') },
+                      { label: 'Firm & License', value: `License # ${[brokerOfRecord.firm_number, brokerOfRecord.license_number].filter(Boolean).join(', ')}${omData.address?.state_abbr ? ` (${omData.address.state_abbr})` : ''}`, copy: `License # ${[brokerOfRecord.firm_number, brokerOfRecord.license_number].filter(Boolean).join(', ')}${omData.address?.state_abbr ? ` (${omData.address.state_abbr})` : ''}` },
                       { label: 'Address', value: brokerOfRecord.address, copy: brokerOfRecord.address },
                       { label: 'Phone', value: '(866) 889-0550', copy: '(866) 889-0550' },
                     ].map((row) => (
@@ -835,42 +910,18 @@ export default function ReviewPage() {
                 Files &amp; Images
               </h3>
 
-              {/* Image gallery */}
-              {finalImages.length > 0 && (
-                <div className="mb-4">
-                  <div className="grid grid-cols-3 gap-2">
-                    {finalImages.map((img, i) => (
-                      <div
-                        key={`preview-${i}`}
-                        className="relative group rounded-xl overflow-hidden border border-gray-100 cursor-pointer"
-                        onClick={() => setLightboxImg(img.watermarkedUrl || img.originalUrl)}
-                      >
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
-                          src={img.watermarkedUrl || img.originalUrl}
-                          alt={img.filename}
-                          className="w-full h-16 object-cover"
-                        />
-                        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center">
-                          <ZoomIn className="w-5 h-5 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
-                        </div>
-                        <p className="text-[10px] text-gray-400 truncate px-2 py-1">{img.filename}</p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
               {/* Downloads */}
               <div className="flex items-center justify-between mb-2">
                 <p className="text-xs font-medium text-gray-400 uppercase tracking-wider">Downloads</p>
                 {selectedDownloads.size > 0 && (
                   <button
                     type="button"
-                    onClick={() => {
+                    onClick={async () => {
                       for (const key of selectedDownloads) {
                         const [url, name] = key.split('|||');
-                        handleDownload(url, name);
+                        await handleDownload(url, name);
+                        // Delay between downloads so Windows browsers don't block them
+                        await new Promise((r) => setTimeout(r, 800));
                       }
                       setSelectedDownloads(new Set());
                     }}
@@ -941,6 +992,21 @@ export default function ReviewPage() {
                   const wmChecked = wmKey ? selectedDownloads.has(wmKey) : false;
                   return (
                   <div key={i} className="space-y-1">
+                    {/* Thumbnail preview */}
+                    <div
+                      className="relative group rounded-xl overflow-hidden border border-gray-100 cursor-pointer"
+                      onClick={() => setLightboxImg(img.watermarkedUrl || img.originalUrl)}
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={img.watermarkedUrl || img.originalUrl}
+                        alt={cleanName}
+                        className="w-full h-28 object-cover"
+                      />
+                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center">
+                        <ZoomIn className="w-5 h-5 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+                      </div>
+                    </div>
                     <div className={`p-2.5 rounded-xl border transition-colors ${origChecked ? 'bg-blue-100 border-blue-300 ring-1 ring-blue-200' : 'bg-blue-50 border-blue-100'}`}>
                       <div className="flex items-center gap-2 mb-1.5">
                         <input type="checkbox" checked={origChecked} onChange={() => { const s = new Set(selectedDownloads); origChecked ? s.delete(origKey) : s.add(origKey); setSelectedDownloads(s); }} className="w-3.5 h-3.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500" />

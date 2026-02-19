@@ -95,6 +95,13 @@ export interface OMLeasingOnly {
   property_type: string | null;
 }
 
+export interface OMLease {
+  lease_type: string | null;
+  lease_price: string | null;
+  lease_commencement: string | null;
+  lease_expiration: string | null;
+}
+
 export interface OMAudit {
   missing_fields: string[];
   assumptions: string[];
@@ -119,7 +126,7 @@ export interface OMData {
   /* Top-level identity */
   record_type: RecordType;
   title: string | null;
-  saleOrLease: 'for-sale' | 'for-lease';
+  saleOrLease: 'for-sale' | 'for-lease' | 'for-auction';
 
   /* Structured sub-objects */
   address: OMAddress;
@@ -131,6 +138,7 @@ export interface OMData {
   descriptions: OMDescriptions;
   loopnet: OMLoopNet;
   leasing_only: OMLeasingOnly;
+  lease: OMLease;
   audit: OMAudit;
 
   /* Scalar fields */
@@ -138,6 +146,7 @@ export interface OMData {
   highlights: string[];
   loopnet_highlights: string[];
   term_remaining: string | null;
+  auction_link: string | null;
   occupancy_rate_percent: number | null;
   year_built: number | null;
   year_renovated: number | null;
@@ -158,7 +167,7 @@ export interface ExtractedImage {
   width: number;
   height: number;
   selected: boolean;
-  watermark: false | 'white' | 'black';
+  watermark: boolean;
   repPhoto: boolean;
 }
 

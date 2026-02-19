@@ -15,7 +15,7 @@ interface ImageInput {
   id: string;
   blobUrl: string;
   selected: boolean;
-  watermark: false | 'white' | 'black';
+  watermark: boolean;
   repPhoto?: boolean;
 }
 
@@ -37,7 +37,7 @@ export async function POST(req: NextRequest) {
     const password = process.env.MARKETING_PDF_LOCK_PASSWORD || 'MATTHEWS-TEST';
 
     // 1. Lock the PDF
-    const pdfResponse = await fetch(pdfBlobUrl);
+    const pdfResponse = await fetch(pdfBlobUrl, { cache: 'no-store' });
     const pdfArrayBuf = await pdfResponse.arrayBuffer();
     const pdfBuffer = Buffer.from(pdfArrayBuf);
 
@@ -66,7 +66,9 @@ export async function POST(req: NextRequest) {
       const batchResults = await Promise.all(
         batch.map(async (img, batchIdx) => {
           const i = b + batchIdx;
+          console.log(`Finalize image ${i}: blobUrl=${img.blobUrl}, id=${img.id}`);
           let imgBuffer = await downloadImage(img.blobUrl);
+          console.log(`Finalize image ${i}: downloaded ${imgBuffer.length} bytes, header=${imgBuffer.slice(0, 4).toString('hex')}`);
 
           let originalBuffer = compress
             ? await compressImage(imgBuffer, 80)
@@ -89,11 +91,11 @@ export async function POST(req: NextRequest) {
             let watermarked = imgBuffer;
 
             if (img.watermark) {
-              watermarked = await watermarkImage(watermarked, img.watermark);
+              watermarked = await watermarkImage(watermarked);
             }
 
             if (img.repPhoto) {
-              watermarked = await repPhotoWatermark(watermarked, img.watermark || 'white');
+              watermarked = await repPhotoWatermark(watermarked);
             }
 
             if (compress) {

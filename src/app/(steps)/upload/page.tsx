@@ -38,6 +38,7 @@ export default function UploadPage() {
   const [restoringIdx, setRestoringIdx] = useState<number | null>(null);
   const [extractImages, setExtractImages] = useState(true);
   const [uploadedImages, setUploadedImages] = useState<File[]>([]);
+  const [pendingPdf, setPendingPdf] = useState<File | null>(null);
 
   // Load recent snapshots on first render
   useEffect(() => {
@@ -69,13 +70,18 @@ export default function UploadPage() {
     }
   };
 
+  /** Store the PDF without processing — user clicks "Process" when ready. */
+  const stagePdf = useCallback((file: File) => {
+    if (file.type !== 'application/pdf') {
+      setError('Please upload a PDF file.');
+      return;
+    }
+    setError('');
+    setPendingPdf(file);
+  }, [setError]);
+
   const handleFile = useCallback(
     async (file: File) => {
-      if (file.type !== 'application/pdf') {
-        setError('Please upload a PDF file.');
-        return;
-      }
-
       setError('');
       setLoading(true);
       setProgressSteps([]);
@@ -159,14 +165,24 @@ export default function UploadPage() {
         // Merge images: result may have empty array, streamed images arrive separately
         let allImages = [...(resultData.images || []), ...streamedImages];
         if (uploadedImages.length > 0) {
+          const slug = resultData.omData.seo?.slug || 'unknown';
           addStep(`Uploading ${uploadedImages.length} image${uploadedImages.length !== 1 ? 's' : ''}...`);
-          const imgFormData = new FormData();
-          imgFormData.append('slug', resultData.omData.seo?.slug || 'unknown');
-          uploadedImages.forEach((f) => imgFormData.append('images', f));
 
+          // Upload each image directly to Vercel Blob (bypasses 4.5 MB limit)
+          const blobUrls: { url: string; name: string }[] = [];
+          for (const imgFile of uploadedImages) {
+            const imgBlob = await upload(`${slug}/images/${imgFile.name}`, imgFile, {
+              access: 'public',
+              handleUploadUrl: '/api/phase1/upload-image',
+            });
+            blobUrls.push({ url: imgBlob.url, name: imgFile.name });
+          }
+
+          // Send blob URLs to server for thumbnail generation
           const imgRes = await fetch('/api/phase1/upload-extra', {
             method: 'POST',
-            body: imgFormData,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ slug, blobUrls }),
           });
           const imgData = await imgRes.json();
           if (imgData.images) {
@@ -221,17 +237,17 @@ export default function UploadPage() {
       e.preventDefault();
       setDragOver(false);
       const file = e.dataTransfer.files[0];
-      if (file) handleFile(file);
+      if (file) stagePdf(file);
     },
-    [handleFile]
+    [stagePdf]
   );
 
   const onFileSelect = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
-      if (file) handleFile(file);
+      if (file) stagePdf(file);
     },
-    [handleFile]
+    [stagePdf]
   );
 
   return (
@@ -254,111 +270,145 @@ export default function UploadPage() {
           <h2 className="text-xl font-semibold text-gray-900 mb-1">Upload an OM</h2>
           <p className="text-sm text-gray-500 mb-6">Drop a PDF below to extract property data, images, and more.</p>
 
-          <div
-            onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-            onDragLeave={() => setDragOver(false)}
-            onDrop={onDrop}
-            onClick={() => fileInputRef.current?.click()}
-            className={`border-2 border-dashed rounded-xl p-14 text-center cursor-pointer transition-all ${
-              dragOver
-                ? 'border-blue-400 bg-blue-50/50 scale-[1.01]'
-                : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50/50'
-            }`}
-          >
-            <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-blue-50 flex items-center justify-center">
-              <FileUp className="w-8 h-8 text-blue-500" />
-            </div>
-            <p className="text-base font-medium text-gray-700 mb-1">
-              Drop your PDF here
-            </p>
-            <p className="text-sm text-gray-400">or click to browse files</p>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="application/pdf"
-              onChange={onFileSelect}
-              className="hidden"
-            />
-          </div>
-
-          <div className="mt-5">
-            <label className="block text-sm font-medium text-gray-600 mb-1.5">
-              Notes <span className="text-gray-400 font-normal">(optional)</span>
-            </label>
-            <textarea
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              rows={2}
-              placeholder="Add context about this OM..."
-              className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-all resize-none"
-            />
-          </div>
-
-          {/* Extract images toggle */}
-          <div className="mt-4 flex items-center gap-3">
-            <button
-              type="button"
-              role="switch"
-              aria-checked={extractImages}
-              onClick={() => setExtractImages(!extractImages)}
-              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                extractImages ? 'bg-blue-500' : 'bg-gray-300'
+          {!pendingPdf ? (
+            /* ── Drop zone (no file staged yet) ── */
+            <div
+              onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+              onDragLeave={() => setDragOver(false)}
+              onDrop={onDrop}
+              onClick={() => fileInputRef.current?.click()}
+              className={`border-2 border-dashed rounded-xl p-14 text-center cursor-pointer transition-all ${
+                dragOver
+                  ? 'border-blue-400 bg-blue-50/50 scale-[1.01]'
+                  : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50/50'
               }`}
             >
-              <span
-                className={`inline-block h-4 w-4 rounded-full bg-white transition-transform ${
-                  extractImages ? 'translate-x-6' : 'translate-x-1'
-                }`}
-              />
-            </button>
-            <span className="text-sm text-gray-600">
-              Extract images from PDF
-            </span>
-          </div>
-
-          {/* Direct image upload */}
-          <div className="mt-4">
-            <button
-              type="button"
-              onClick={() => imageInputRef.current?.click()}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-gray-600 bg-gray-50 hover:bg-gray-100 border border-gray-200 transition-colors"
-            >
-              <ImagePlus className="w-4 h-4" />
-              Upload Images Directly
-            </button>
-            <input
-              ref={imageInputRef}
-              type="file"
-              accept="image/*"
-              multiple
-              onChange={(e) => {
-                if (e.target.files) {
-                  setUploadedImages((prev) => [...prev, ...Array.from(e.target.files!)]);
-                }
-              }}
-              className="hidden"
-            />
-            {uploadedImages.length > 0 && (
-              <div className="mt-2 flex flex-wrap gap-2">
-                {uploadedImages.map((file, idx) => (
-                  <div
-                    key={`${file.name}-${idx}`}
-                    className="flex items-center gap-1.5 bg-blue-50 text-blue-700 text-xs px-2.5 py-1.5 rounded-lg"
-                  >
-                    <span className="max-w-[120px] truncate">{file.name}</span>
-                    <button
-                      onClick={() =>
-                        setUploadedImages((prev) => prev.filter((_, i) => i !== idx))
-                      }
-                      className="text-blue-400 hover:text-blue-600"
-                    >
-                      <X className="w-3 h-3" />
-                    </button>
-                  </div>
-                ))}
+              <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-blue-50 flex items-center justify-center">
+                <FileUp className="w-8 h-8 text-blue-500" />
               </div>
-            )}
-          </div>
+              <p className="text-base font-medium text-gray-700 mb-1">
+                Drop your PDF here
+              </p>
+              <p className="text-sm text-gray-400">or click to browse files</p>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="application/pdf"
+                onChange={onFileSelect}
+                className="hidden"
+              />
+            </div>
+          ) : (
+            /* ── File staged — show controls, then "Process" button ── */
+            <>
+              <div className="border-2 border-blue-200 bg-blue-50/40 rounded-xl p-4 flex items-center gap-3">
+                <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center flex-shrink-0">
+                  <FileUp className="w-5 h-5 text-blue-600" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-gray-800 truncate">{pendingPdf.name}</p>
+                  <p className="text-xs text-gray-400">{(pendingPdf.size / 1024 / 1024).toFixed(1)} MB</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => { setPendingPdf(null); setUploadedImages([]); }}
+                  className="text-gray-400 hover:text-red-500 transition-colors"
+                  title="Remove"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Notes */}
+              <div className="mt-5">
+                <label className="block text-sm font-medium text-gray-600 mb-1.5">
+                  Notes <span className="text-gray-400 font-normal">(optional)</span>
+                </label>
+                <textarea
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  rows={2}
+                  placeholder="Add context about this OM..."
+                  className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-all resize-none"
+                />
+              </div>
+
+              {/* Extract images toggle */}
+              <div className="mt-4 flex items-center gap-3">
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={extractImages}
+                  onClick={() => setExtractImages(!extractImages)}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                    extractImages ? 'bg-blue-500' : 'bg-gray-300'
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-4 w-4 rounded-full bg-white transition-transform ${
+                      extractImages ? 'translate-x-6' : 'translate-x-1'
+                    }`}
+                  />
+                </button>
+                <span className="text-sm text-gray-600">
+                  Extract images from PDF
+                </span>
+              </div>
+
+              {/* Direct image upload */}
+              <div className="mt-4">
+                <button
+                  type="button"
+                  onClick={() => imageInputRef.current?.click()}
+                  className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-gray-600 bg-gray-50 hover:bg-gray-100 border border-gray-200 transition-colors"
+                >
+                  <ImagePlus className="w-4 h-4" />
+                  Upload Images Directly
+                </button>
+                <input
+                  ref={imageInputRef}
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  onChange={(e) => {
+                    if (e.target.files) {
+                      setUploadedImages((prev) => [...prev, ...Array.from(e.target.files!)]);
+                    }
+                  }}
+                  className="hidden"
+                />
+                {uploadedImages.length > 0 && (
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {uploadedImages.map((file, idx) => (
+                      <div
+                        key={`${file.name}-${idx}`}
+                        className="flex items-center gap-1.5 bg-blue-50 text-blue-700 text-xs px-2.5 py-1.5 rounded-lg"
+                      >
+                        <span className="max-w-[120px] truncate">{file.name}</span>
+                        <button
+                          onClick={() =>
+                            setUploadedImages((prev) => prev.filter((_, i) => i !== idx))
+                          }
+                          className="text-blue-400 hover:text-blue-600"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Process button */}
+              <button
+                type="button"
+                onClick={() => handleFile(pendingPdf)}
+                className="mt-6 w-full bg-blue-600 hover:bg-blue-700 text-white font-medium px-6 py-3 rounded-xl transition-colors text-sm"
+              >
+                Process PDF →
+              </button>
+            </>
+          )}
         </div>
 
         {/* Recent snapshots */}

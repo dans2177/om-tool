@@ -91,6 +91,7 @@ export async function encryptPDFRestricted(
 
   // ── Compute keys ─────────────────────────────────────────────
   const permissions = RESTRICTIVE_PERMISSIONS;
+
   const ownerKey = computeOwnerKey(ownerPassword, userPassword);
   const encryptionKey = computeEncryptionKey(
     userPassword,
@@ -103,6 +104,7 @@ export async function encryptPDFRestricted(
   // ── Encrypt all indirect objects ─────────────────────────────
   const indirectObjects = context.enumerateIndirectObjects();
 
+  // Identify the /Info object so we can skip encrypting it.
   for (const [ref, obj] of indirectObjects) {
     const objectNum = ref.objectNumber;
     const generationNum = ref.generationNumber || 0;

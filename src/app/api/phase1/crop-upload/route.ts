@@ -24,6 +24,19 @@ export async function POST(req: NextRequest) {
       allowOverwrite: true,
     });
 
+    console.log(`crop-upload: saved ${buffer.length} bytes → ${blob.url}`);
+
+    // Verify blob is immediately accessible before returning URL
+    const check = await fetch(blob.url, { method: 'HEAD', cache: 'no-store' });
+    if (!check.ok) {
+      console.warn(`crop-upload: blob check returned ${check.status} for ${blob.url}, waiting 1s and retrying...`);
+      await new Promise((r) => setTimeout(r, 1000));
+      const recheck = await fetch(blob.url, { method: 'HEAD', cache: 'no-store' });
+      if (!recheck.ok) {
+        console.error(`crop-upload: blob still not accessible (${recheck.status}) for ${blob.url}`);
+      }
+    }
+
     return NextResponse.json({ blobUrl: blob.url });
   } catch (error: any) {
     console.error('Crop upload error:', error);
