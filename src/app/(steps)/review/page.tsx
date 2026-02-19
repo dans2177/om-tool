@@ -159,6 +159,7 @@ export default function ReviewPage() {
 
   const [descTab, setDescTab] = useState<'matthews' | 'third_parties'>('matthews');
   const [selectedDownloads, setSelectedDownloads] = useState<Set<string>>(new Set());
+  const [rightTab, setRightTab] = useState<'files' | 'pdf'>('files');
   const [leftPct, setLeftPct] = useState(66);
   const dragging = useRef(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -893,22 +894,39 @@ export default function ReviewPage() {
           </div>
 
           {/* ═══════════ Right: PDF + Files & Images ═══════════ */}
-          <div className="flex-1 min-w-0 space-y-3 lg:sticky lg:top-4 lg:max-h-[92vh] lg:overflow-y-auto">
-            {/* PDF Viewer */}
-            <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-4 overflow-hidden flex flex-col">
-              <h3 className="text-sm font-semibold text-indigo-600 uppercase tracking-wider mb-3">
-                PDF Preview
-              </h3>
-              <div className="flex-1 min-h-0" style={{ height: '50vh' }}>
-                <PDFViewer url={pdfBlobUrl} />
-              </div>
+          <div className="flex-1 min-w-0 lg:sticky lg:top-4 lg:max-h-[92vh] flex flex-col">
+            {/* Tab bar */}
+            <div className="flex bg-white rounded-t-2xl border border-b-0 border-gray-200 overflow-hidden shrink-0">
+              <button
+                type="button"
+                onClick={() => setRightTab('files')}
+                className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 text-xs font-semibold uppercase tracking-wider transition-colors ${rightTab === 'files' ? 'text-indigo-600 bg-indigo-50 border-b-2 border-indigo-500' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-50'}`}
+              >
+                <Download className="w-3.5 h-3.5" /> Files &amp; Images
+              </button>
+              <button
+                type="button"
+                onClick={() => setRightTab('pdf')}
+                className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 text-xs font-semibold uppercase tracking-wider transition-colors ${rightTab === 'pdf' ? 'text-indigo-600 bg-indigo-50 border-b-2 border-indigo-500' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-50'}`}
+              >
+                <Eye className="w-3.5 h-3.5" /> PDF Preview
+              </button>
             </div>
 
-            {/* Files & Images */}
-            <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-4">
-              <h3 className="text-sm font-semibold text-indigo-600 uppercase tracking-wider mb-3">
-                Files &amp; Images
-              </h3>
+            {/* Tab content */}
+            <div className="flex-1 min-h-0 overflow-y-auto bg-white rounded-b-2xl border border-t-0 border-gray-200 shadow-sm">
+              {/* PDF Viewer */}
+              {rightTab === 'pdf' && (
+                <div className="p-4 flex flex-col h-full">
+                  <div className="flex-1 min-h-0" style={{ height: 'calc(92vh - 60px)' }}>
+                    <PDFViewer url={pdfBlobUrl} />
+                  </div>
+                </div>
+              )}
+
+              {/* Files & Images */}
+              {rightTab === 'files' && (
+                <div className="p-4">
 
               {/* Downloads */}
               <div className="flex items-center justify-between mb-2">
@@ -1052,6 +1070,8 @@ export default function ReviewPage() {
                   );
                 })}
               </div>
+                </div>
+              )}
             </div>
           </div>
         </div>

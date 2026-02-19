@@ -169,25 +169,9 @@ export async function watermarkImage(
 ): Promise<Buffer> {
   const logoPath = path.join(process.cwd(), 'public', 'logo.png');
 
-  // Check if logo exists
   if (!fs.existsSync(logoPath)) {
-    // If no logo, return original with a text-based watermark
-    const metadata = await sharp(imageBuffer).metadata();
-    const w = metadata.width || 800;
-    const h = metadata.height || 600;
-    const fontSize = Math.max(16, Math.floor(w / 30));
-
-    const fillColor = 'rgba(255,255,255,0.6)';
-    const svgText = `<svg width="${w}" height="${h}">
-      <text x="${w / 2}" y="${h - 30}" font-size="${fontSize}" fill="${fillColor}"
-        text-anchor="middle" font-family="Liberation Sans, DejaVu Sans, sans-serif" font-weight="bold">
-        CONFIDENTIAL
-      </text>
-    </svg>`;
-
-    return sharp(imageBuffer)
-      .composite([{ input: Buffer.from(svgText), gravity: 'southeast' }])
-      .toBuffer();
+    console.warn('watermarkImage: public/logo.png not found, skipping watermark');
+    return imageBuffer;
   }
 
   const metadata = await sharp(imageBuffer).metadata();
