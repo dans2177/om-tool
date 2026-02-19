@@ -37,7 +37,7 @@ Return this exact JSON structure:
   "seo": {
     "seo_title": "<Title Case. Use title if available, else street number + street name.>",
     "slug": "<Format: {record_type}-{title-or-addr-lowercased}-{city}-{state_abbr}. All lowercase, spaces to hyphens, no punctuation except hyphens. IMPORTANT: If saleOrLease is 'for-lease', ALWAYS use 'leasing' as the record_type prefix in the slug regardless of the actual record_type (e.g. 'leasing-warehouse-phoenix-az' not 'industrial-warehouse-phoenix-az'). Examples: stnl-dollar-general-phoenix-az, sc-desert-ridge-marketplace-phoenix-az, leasing-warehouse-phoenix-az>",
-    "meta_description": "<MUST follow one of these exact templates depending on saleOrLease. For sale: 'Now Available – {TITLE OR ADDRESS} in {City, State Abbr}. Listed by {First Agent Name}. Explore this property and Download the Offering Memorandum today.' For lease: 'Now Leasing – {TITLE OR ADDRESS} For Lease in {City, State Abbr}. Listed by {First Agent Name}. Explore this property and Download the Leasing Brochure today.' For auction: 'Now at Auction – {TITLE OR ADDRESS} in {City, State Abbr}. Listed by {First Agent Name}. Explore this property and Download the Offering Memorandum today.' Use the property title if available, otherwise use the street address. ALWAYS use the FIRST listing agent's full name.>"
+    "meta_description": "<MUST follow one of these exact templates depending on saleOrLease. For sale: 'Now Available – {TITLE OR ADDRESS} in {City, State Abbr}. Listed by {First Agent Name}. Explore this property and Download the Offering Memorandum today.' For lease: 'Now Leasing – {TITLE OR ADDRESS} For Lease in {City, State Abbr}. Listed by {First Agent Name}. Explore this property and Download the Leasing Brochure today.' For auction: 'Now at Auction – {TITLE OR ADDRESS} in {City, State Abbr}. Listed by {First Agent Name}. Explore this property and Download the Offering Memorandum today.' Use the property title if available, otherwise use the street address. ALWAYS use the FIRST listing agent's full name — this is the first agent listed under 'Exclusively Listed By' or 'Listed By' in the OM (typically a junior agent like an Associate or Senior Associate, NOT the senior broker).>"
   },
 
   "financials": {
@@ -77,6 +77,7 @@ Return this exact JSON structure:
       "role": "<their title/role as listed, e.g. Vice President, Senior Associate, Advisor, First Vice President, Associate, etc.>"
     }
   ],
+  // IMPORTANT: listing_agents MUST be ordered exactly as they appear in the OM under 'Exclusively Listed By' or 'Listed By'. The first name listed in the OM goes first in the array. Do NOT reorder by seniority — keep the OM's original order. The first agent is used in the meta_description.
 
   "descriptions": {
     "internal_editor_html": "<HTML for WordPress editor. Use <ul><li> bullets from highlights. Each bullet MUST use <strong>Title:</strong> followed by the non-bold description text, matching the OM's property highlights exactly. Example: <ul><li><strong>Growing Trade Area:</strong> Elon, NC benefits from strong regional connectivity...</li></ul>>",

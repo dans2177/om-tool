@@ -196,26 +196,34 @@ export async function watermarkImage(
 
   // Resize logo to ~25% of image width
   const logoWidth = Math.floor(imgWidth * 0.25);
-  let logoBuffer = await sharp(logoPath)
+  const logoResized = await sharp(logoPath)
     .resize({ width: logoWidth })
-    .ensureAlpha(0.5)
+    .ensureAlpha()
+    .png()
     .toBuffer();
 
-  // Add padding around the logo so it doesn't touch the image edges
-  const padding = Math.max(10, Math.floor(imgWidth * 0.03));
+  // Reduce logo opacity to 50% by manipulating the raw alpha channel
+  const { data: rawData, info: rawInfo } = await sharp(logoResized)
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+  for (let i = 3; i < rawData.length; i += 4) {
+    rawData[i] = Math.round(rawData[i] * 0.5);
+  }
+  const logoBuffer = await sharp(rawData, {
+    raw: { width: rawInfo.width, height: rawInfo.height, channels: 4 },
+  }).png().toBuffer();
+
   const logoMeta = await sharp(logoBuffer).metadata();
-  logoBuffer = await sharp(logoBuffer)
-    .extend({
-      top: padding,
-      bottom: padding,
-      left: padding,
-      right: padding,
-      background: { r: 0, g: 0, b: 0, alpha: 0 },
-    })
-    .toBuffer();
+  const logoW = logoMeta.width || logoWidth;
+  const logoH = logoMeta.height || Math.floor(logoWidth / 3);
+
+  // Position at bottom-right with explicit padding (like repPhotoWatermark)
+  const padding = Math.max(15, Math.floor(imgWidth * 0.03));
+  const left = Math.max(0, imgWidth - logoW - padding);
+  const top = Math.max(0, imgHeight - logoH - padding);
 
   return sharp(imageBuffer)
-    .composite([{ input: logoBuffer, gravity: 'southeast' }])
+    .composite([{ input: logoBuffer, left, top }])
     .toBuffer();
 }
 
@@ -223,84 +231,39 @@ export async function watermarkImage(
  * Apply a "Representative Photo" text watermark to the bottom-left of an image.
  * Stacks with the logo watermark (bottom-right).
  *
- * Uses sharp's Pango-based text rendering instead of SVG to avoid
- * librsvg font-availability and feDropShadow filter issues on Vercel
- * serverless (Amazon Linux).
+ * Uses a pre-rendered PNG (public/rep-photo.png) to avoid font-availability
+ * issues on Vercel serverless (Amazon Linux has almost no fonts).
+ * Regenerate with: node scripts/gen-rep-photo.js
  */
 export async function repPhotoWatermark(
   imageBuffer: Buffer,
 ): Promise<Buffer> {
+  const repPath = path.join(process.cwd(), 'public', 'rep-photo.png');
+
+  if (!fs.existsSync(repPath)) {
+    console.warn('repPhotoWatermark: public/rep-photo.png not found, skipping');
+    return imageBuffer;
+  }
+
   const metadata = await sharp(imageBuffer).metadata();
-  const w = metadata.width || 800;
-  const h = metadata.height || 600;
-  const fontSize = Math.max(14, Math.floor(w / 40));
+  const imgWidth = metadata.width || 800;
+  const imgHeight = metadata.height || 600;
 
-  const pangoMarkup = `<span font_weight="bold" font="${fontSize}">Representative Photo</span>`;
-
-  // Render the shadow layer (offset by 1px)
-  const shadowText = await sharp({
-    text: {
-      text: pangoMarkup,
-      font: 'sans-serif',
-      rgba: true,
-      dpi: 72,
-    },
-  })
+  // Scale the pre-rendered text to ~30% of image width
+  const targetWidth = Math.max(120, Math.floor(imgWidth * 0.30));
+  const textOverlay = await sharp(repPath)
+    .resize({ width: targetWidth })
     .png()
     .toBuffer();
 
-  // Tint shadow to the shadow color with reduced opacity
-  const shadowTinted = await sharp(shadowText)
-    .ensureAlpha()
-    .tint({ r: 0, g: 0, b: 0 })
-    .png()
-    .toBuffer();
+  const overlayMeta = await sharp(textOverlay).metadata();
+  const overlayW = overlayMeta.width || targetWidth;
+  const overlayH = overlayMeta.height || 40;
 
-  // Render the main text layer
-  const mainText = await sharp({
-    text: {
-      text: pangoMarkup,
-      font: 'sans-serif',
-      rgba: true,
-      dpi: 72,
-    },
-  })
-    .png()
-    .toBuffer();
-
-  const mainTinted = await sharp(mainText)
-    .ensureAlpha()
-    .tint({ r: 255, g: 255, b: 255 })
-    .png()
-    .toBuffer();
-
-  const textMeta = await sharp(mainTinted).metadata();
-  const textW = textMeta.width || 200;
-  const textH = textMeta.height || 30;
-
-  // Build a small canvas with shadow + text composited
-  const padding = 20;
-  const canvasW = textW + padding * 2 + 2; // +2 for shadow offset
-  const canvasH = textH + padding * 2 + 2;
-
-  const textOverlay = await sharp({
-    create: {
-      width: canvasW,
-      height: canvasH,
-      channels: 4,
-      background: { r: 0, g: 0, b: 0, alpha: 0 },
-    },
-  })
-    .composite([
-      { input: shadowTinted, left: padding + 1, top: padding + 1 },
-      { input: mainTinted, left: padding, top: padding },
-    ])
-    .png()
-    .toBuffer();
-
-  // Place at bottom-left of the original image
-  const left = 0;
-  const top = Math.max(0, h - canvasH);
+  // Place at bottom-left with padding
+  const padding = Math.max(10, Math.floor(imgWidth * 0.02));
+  const left = padding;
+  const top = Math.max(0, imgHeight - overlayH - padding);
 
   return sharp(imageBuffer)
     .composite([{ input: textOverlay, left, top }])
