@@ -369,7 +369,7 @@ export default function ReviewPage() {
             <Section title="Property Info" defaultOpen>
               <div className="grid grid-cols-2 gap-3">
                 <Field label="Title" value={omData.title} onChange={(v) => update('title', v)} fullWidth />
-                <Field label="SEO Title (auto)" value={`${omData.title || omData.address?.street || ''} - ${[omData.address?.city, omData.address?.state_abbr].filter(Boolean).join(', ')} | MATTHEWS`} fullWidth readOnly copyOverride={`${omData.title || omData.address?.street || ''} - ${[omData.address?.city, omData.address?.state_abbr].filter(Boolean).join(', ')} | MATTHEWS`} />
+                <Field label="SEO Title (auto)" value={`${omData.title || `${omData.address?.street_number ?? ''} ${omData.address?.street_name ?? ''}`.trim() || ''} - ${[omData.address?.city, omData.address?.state_abbr].filter(Boolean).join(', ')} | MATTHEWS`} onChange={() => {}} fullWidth readonly />
                 <div>
                   <label className="block text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-0.5">Record Type</label>
                   <select
