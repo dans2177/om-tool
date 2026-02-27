@@ -3,12 +3,13 @@
 import { useState, useCallback } from 'react';
 import Cropper from 'react-easy-crop';
 import type { Area } from 'react-easy-crop';
-import { ChevronLeft, ChevronRight, Crop, SkipForward, X, Check, RotateCcw } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Crop, SkipForward, X, Check, RotateCcw, GripVertical } from 'lucide-react';
 
 interface CropperModalProps {
   images: { id: string; blobUrl: string }[];
   onComplete: (croppedBlobs: Map<string, Blob>) => void;
   onCancel: () => void;
+  onReorder?: (fromIdx: number, toIdx: number) => void;
 }
 
 /**
@@ -76,7 +77,7 @@ async function blobToPreview(blob: Blob): Promise<string> {
 
 type CropDecision = { type: 'cropped'; blob: Blob; preview: string } | { type: 'skipped' };
 
-export default function ImageCropper({ images, onComplete, onCancel }: CropperModalProps) {
+export default function ImageCropper({ images, onComplete, onCancel, onReorder }: CropperModalProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [crop, setCrop] = useState({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(1);
@@ -88,6 +89,10 @@ export default function ImageCropper({ images, onComplete, onCancel }: CropperMo
 
   // Review mode — after all images have been visited
   const [reviewing, setReviewing] = useState(false);
+
+  // Drag-and-drop reorder state for review grid
+  const [dragIdx, setDragIdx] = useState<number | null>(null);
+  const [dragOverIdx, setDragOverIdx] = useState<number | null>(null);
 
   const currentImage = images[currentIndex];
 
@@ -182,8 +187,9 @@ export default function ImageCropper({ images, onComplete, onCancel }: CropperMo
           </button>
         </div>
 
-        {/* Thumbnails grid */}
+        {/* Thumbnails grid — drag-and-drop reorderable */}
         <div className="flex-1 overflow-y-auto p-6">
+          <p className="text-white/40 text-xs text-center mb-3">Drag images to reorder. Order here = final output order.</p>
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 max-w-6xl mx-auto">
             {images.map((img, idx) => {
               const decision = decisions.get(img.id);
@@ -193,7 +199,21 @@ export default function ImageCropper({ images, onComplete, onCancel }: CropperMo
               return (
                 <div
                   key={img.id}
-                  className="relative group rounded-xl overflow-hidden border-2 border-white/10 hover:border-white/30 transition-colors"
+                  draggable
+                  onDragStart={() => setDragIdx(idx)}
+                  onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; if (idx !== dragOverIdx) setDragOverIdx(idx); }}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    if (dragIdx !== null && dragIdx !== idx && onReorder) {
+                      onReorder(dragIdx, idx);
+                    }
+                    setDragIdx(null);
+                    setDragOverIdx(null);
+                  }}
+                  onDragEnd={() => { setDragIdx(null); setDragOverIdx(null); }}
+                  className={`relative group rounded-xl overflow-hidden border-2 transition-all ${
+                    dragIdx === idx ? 'opacity-40 scale-95 border-white/10' : 'border-white/10 hover:border-white/30'
+                  } ${dragOverIdx === idx && dragIdx !== idx ? 'ring-4 ring-blue-400 border-blue-400 scale-105' : ''}`}
                 >
                   <img
                     src={previewSrc}
@@ -201,7 +221,8 @@ export default function ImageCropper({ images, onComplete, onCancel }: CropperMo
                     className="w-full aspect-video object-cover"
                   />
                   {/* Badge */}
-                  <div className="absolute top-2 left-2">
+                  <div className="absolute top-2 left-2 flex items-center gap-1">
+                    <GripVertical className="w-3.5 h-3.5 text-white/60 cursor-grab active:cursor-grabbing" />
                     <span
                       className={`text-xs font-medium px-2 py-0.5 rounded-full ${
                         isCropped

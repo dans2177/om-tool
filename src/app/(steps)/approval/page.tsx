@@ -1,9 +1,9 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { upload } from '@vercel/blob/client';
-import { Upload, Check, Eye, X, Image as ImageIcon, GripVertical } from 'lucide-react';
+import { Upload, Check, Eye, X, Image as ImageIcon } from 'lucide-react';
 import { useOM } from '@/context/OMContext';
 import LoadingOverlay from '@/components/LoadingOverlay';
 import ImageCropper from '@/components/ImageCropper';
@@ -26,42 +26,6 @@ export default function ApprovalPage() {
 
   const [showCropper, setShowCropper] = useState(false);
   const extraInputRef = useRef<HTMLInputElement>(null);
-
-  // Drag-and-drop reorder state
-  const [dragIdx, setDragIdx] = useState<number | null>(null);
-  const [dragOverIdx, setDragOverIdx] = useState<number | null>(null);
-
-  const handleDragStart = useCallback((idx: number) => {
-    setDragIdx(idx);
-  }, []);
-
-  const handleDragOver = useCallback((e: React.DragEvent, idx: number) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-    if (idx !== dragOverIdx) setDragOverIdx(idx);
-  }, [dragOverIdx]);
-
-  const handleDrop = useCallback((e: React.DragEvent, dropIdx: number) => {
-    e.preventDefault();
-    if (dragIdx === null || dragIdx === dropIdx) {
-      setDragIdx(null);
-      setDragOverIdx(null);
-      return;
-    }
-    setImages(prev => {
-      const updated = [...prev];
-      const [moved] = updated.splice(dragIdx, 1);
-      updated.splice(dropIdx, 0, moved);
-      return updated;
-    });
-    setDragIdx(null);
-    setDragOverIdx(null);
-  }, [dragIdx, setImages]);
-
-  const handleDragEnd = useCallback(() => {
-    setDragIdx(null);
-    setDragOverIdx(null);
-  }, []);
 
   // Redirect if no data (in useEffect to avoid setState-during-render warning)
   useEffect(() => {
@@ -259,7 +223,7 @@ export default function ApprovalPage() {
             <div>
               <h2 className="text-lg font-semibold text-gray-900">Select Images</h2>
               <p className="text-sm text-gray-500">
-                {images.length} extracted &middot; {selectedCount} selected &middot; Click to toggle &middot; Drag to reorder
+                {images.length} extracted &middot; {selectedCount} selected &middot; Click to toggle
               </p>
             </div>
             <div className="flex items-center gap-3 flex-wrap">
@@ -314,23 +278,17 @@ export default function ApprovalPage() {
             {images.map((img, idx) => (
               <div
                 key={img.id}
-                draggable
-                onDragStart={() => handleDragStart(idx)}
-                onDragOver={(e) => handleDragOver(e, idx)}
-                onDrop={(e) => handleDrop(e, idx)}
-                onDragEnd={handleDragEnd}
                 className={`relative bg-white rounded-2xl border-2 overflow-hidden transition-all cursor-pointer ${
                   img.selected
                     ? 'border-blue-400 ring-2 ring-blue-100 shadow-sm'
                     : 'border-gray-100 opacity-50 hover:opacity-75 hover:border-gray-200'
-                } ${dragIdx === idx ? 'opacity-40 scale-95' : ''} ${dragOverIdx === idx && dragIdx !== idx ? 'ring-4 ring-blue-300 border-blue-400' : ''}`}
+                }`}
               >
-                {/* Position badge + drag handle */}
-                <div className="absolute top-2 left-2 z-10 flex items-center gap-1">
+                {/* Position badge */}
+                <div className="absolute top-2 left-2 z-10">
                   <span className="bg-black/60 text-white text-[10px] font-bold rounded px-1.5 py-0.5 leading-none tabular-nums">
                     {idx + 1}
                   </span>
-                  <GripVertical className="w-3.5 h-3.5 text-white/70 drop-shadow cursor-grab active:cursor-grabbing" />
                 </div>
                 <div className="relative group" onClick={() => toggleSelect(img.id)}>
                   {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -416,6 +374,22 @@ export default function ApprovalPage() {
           images={images.filter((i) => i.selected)}
           onComplete={handleCropComplete}
           onCancel={() => setShowCropper(false)}
+          onReorder={(fromIdx, toIdx) => {
+            // Map from selected-only indices back to the full images array
+            const selectedImages = images.filter((i) => i.selected);
+            const fromId = selectedImages[fromIdx]?.id;
+            const toId = selectedImages[toIdx]?.id;
+            if (!fromId || !toId) return;
+            setImages(prev => {
+              const updated = [...prev];
+              const fromFull = updated.findIndex(i => i.id === fromId);
+              const toFull = updated.findIndex(i => i.id === toId);
+              if (fromFull < 0 || toFull < 0) return prev;
+              const [moved] = updated.splice(fromFull, 1);
+              updated.splice(toFull, 0, moved);
+              return updated;
+            });
+          }}
         />
       )}
 
