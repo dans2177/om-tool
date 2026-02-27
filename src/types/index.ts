@@ -111,6 +111,11 @@ export interface OMAudit {
   };
 }
 
+export interface OMHubSpotEmail {
+  subject: string | null;
+  preview_header: string | null;
+}
+
 export interface BrokerOfRecord {
   name: string;
   company: string;
@@ -139,6 +144,7 @@ export interface OMData {
   loopnet: OMLoopNet;
   leasing_only: OMLeasingOnly;
   lease: OMLease;
+  hubspot_email: OMHubSpotEmail;
   audit: OMAudit;
 
   /* Scalar fields */

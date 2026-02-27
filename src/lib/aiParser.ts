@@ -114,6 +114,11 @@ Return this exact JSON structure:
 
   "auction_link": null,
 
+  "hubspot_email": {
+    "subject": "<Email subject line for HubSpot marketing email about this property. Compelling, concise, professional. Include the property title/name and city. Examples: 'Now Available: Dollar General in Phoenix, AZ', 'New Listing: Desert Ridge Marketplace – Scottsdale, AZ', 'Just Listed: 1234 Main Street – NNN Investment in Dallas, TX'>",
+    "preview_header": "<Email preview/preheader text, MAX 80 characters. This appears after the subject in email clients. Summarize the key selling point. Examples: 'Absolute NNN lease with 10+ years remaining and 2% annual increases', 'Fully leased shopping center with strong national tenants'>"
+  },
+
   "audit": {
     "missing_fields": ["<list field names you could NOT find in the OM>"],
     "assumptions": ["<list any assumptions you made, e.g. 'Assumed for-sale based on presence of cap rate'>"],
@@ -220,6 +225,10 @@ export async function parseOM(rawText: string, notes?: string): Promise<OMData> 
       lease_expiration: raw.lease?.lease_expiration || null,
     },
     auction_link: raw.auction_link || null,
+    hubspot_email: {
+      subject: raw.hubspot_email?.subject || null,
+      preview_header: raw.hubspot_email?.preview_header?.slice(0, 80) || null,
+    },
     audit: {
       missing_fields: raw.audit?.missing_fields || [],
       assumptions: raw.audit?.assumptions || [],

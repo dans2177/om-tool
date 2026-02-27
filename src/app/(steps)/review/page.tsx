@@ -19,6 +19,7 @@ const SECTION_COLORS: Record<string, string> = {
   'Size & Dates': 'border-l-cyan-500',
   'Occupancy': 'border-l-orange-500',
   'Lease Info': 'border-l-green-500',
+  'HubSpot Email': 'border-l-orange-400',
   'Broker of Record': 'border-l-rose-500',
   'Descriptions': 'border-l-indigo-500',
   'LoopNet Highlights': 'border-l-lime-500',
@@ -575,6 +576,28 @@ export default function ReviewPage() {
                 <Field label="Commencement Date" value={omData.lease?.lease_commencement} onChange={(v) => update('lease.lease_commencement', v)} placeholder="e.g. 01/2020" />
                 <Field label="Expiration Date" value={omData.lease?.lease_expiration} onChange={(v) => update('lease.lease_expiration', v)} placeholder="e.g. 12/2035" />
                 <Field label="Term Remaining" value={omData.term_remaining} onChange={(v) => update('term_remaining', v)} placeholder="e.g. ± 12 Years" fullWidth />
+              </div>
+            </Section>
+
+            {/* ── HubSpot Email ── */}
+            <Section title="HubSpot Email" defaultOpen>
+              <div className="space-y-3">
+                <Field label="Email Subject" value={omData.hubspot_email?.subject} onChange={(v) => update('hubspot_email.subject', v)} placeholder="e.g. Now Available: Dollar General in Phoenix, AZ" fullWidth />
+                <div>
+                  <label className="block text-[11px] font-medium text-gray-500 mb-1">Preview Header <span className="text-gray-300 font-normal">(max 80 chars)</span></label>
+                  <div className="relative">
+                    <input
+                      value={omData.hubspot_email?.preview_header ?? ''}
+                      onChange={(e) => update('hubspot_email.preview_header', e.target.value.slice(0, 80))}
+                      maxLength={80}
+                      placeholder="e.g. Absolute NNN lease with 10+ years remaining and 2% annual increases"
+                      className="w-full border border-gray-200 rounded px-2 py-1 text-sm hover:border-gray-300 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-colors pr-12"
+                    />
+                    <span className={`absolute right-2 top-1/2 -translate-y-1/2 text-[10px] font-mono ${(omData.hubspot_email?.preview_header?.length ?? 0) > 70 ? 'text-amber-500' : 'text-gray-300'}`}>
+                      {omData.hubspot_email?.preview_header?.length ?? 0}/80
+                    </span>
+                  </div>
+                </div>
               </div>
             </Section>
 
