@@ -1,2 +1,8 @@
 {
+  "functions": {
+    "api/lock-pdf.py": {
+      "runtime": "@vercel/python",
+      "maxDuration": 120
+    }
+  }
 }

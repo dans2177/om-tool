@@ -36,13 +36,14 @@ export async function POST(req: NextRequest) {
     const password = process.env.MARKETING_PDF_LOCK_PASSWORD || 'Matthews841';
 
     // 1. Lock & compress the PDF via Python pikepdf (preserves links & formatting)
+    //    The Python function lives at /api/lock-pdf (Vercel Python runtime)
     const vercelUrl = process.env.VERCEL_URL;
     const protocol = vercelUrl?.includes('localhost') ? 'http' : 'https';
     const baseUrl = vercelUrl
       ? `${protocol}://${vercelUrl}`
       : `http://localhost:3000`;
 
-    const lockResponse = await fetch(`${baseUrl}/api/phase1/lock-pdf`, {
+    const lockResponse = await fetch(`${baseUrl}/api/lock-pdf`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
