@@ -76,90 +76,80 @@ export async function POST(req: NextRequest) {
       hasRepRendering: boolean;
     }[] = [];
 
-    // Process images in parallel batches of 5
-    const BATCH = 5;
-    for (let b = 0; b < selectedImages.length; b += BATCH) {
-      const batch = selectedImages.slice(b, b + BATCH);
-      const batchResults = await Promise.all(
-        batch.map(async (img, batchIdx) => {
-          const i = b + batchIdx;
-          console.log(`Finalize image ${i}: blobUrl=${img.blobUrl}, id=${img.id}`);
-          let imgBuffer = await downloadImage(img.blobUrl);
-          console.log(`Finalize image ${i}: downloaded ${imgBuffer.length} bytes, header=${imgBuffer.slice(0, 4).toString('hex')}`);
+    // Process images sequentially to guarantee order
+    for (let i = 0; i < selectedImages.length; i++) {
+      const img = selectedImages[i];
+      console.log(`Finalize image ${i}: blobUrl=${img.blobUrl}, id=${img.id}`);
+      let imgBuffer = await downloadImage(img.blobUrl);
+      console.log(`Finalize image ${i}: downloaded ${imgBuffer.length} bytes, header=${imgBuffer.slice(0, 4).toString('hex')}`);
 
-          let originalBuffer = compress
-            ? await compressImage(imgBuffer, 80)
-            : imgBuffer;
+      let originalBuffer = compress
+        ? await compressImage(imgBuffer, 80)
+        : imgBuffer;
 
-          const ext = compress ? 'jpg' : 'png';
-          const contentType = compress ? 'image/jpeg' : 'image/png';
-          const originalFilename = `${slug}/final/image-${i}.${ext}`;
+      const ext = compress ? 'jpg' : 'png';
+      const contentType = compress ? 'image/jpeg' : 'image/png';
+      const originalFilename = `${slug}/final/image-${i}.${ext}`;
 
-          const originalBlob = await put(originalFilename, originalBuffer, {
-            access: 'public',
-            contentType,
-            addRandomSuffix: false,
-            allowOverwrite: true,
-          });
+      // addRandomSuffix: true gives each run unique URLs (prevents browser caching stale images)
+      const originalBlob = await put(originalFilename, originalBuffer, {
+        access: 'public',
+        contentType,
+        addRandomSuffix: true,
+      });
 
-          let watermarkedUrl: string | undefined;
-          let rrUrl: string | undefined;
+      let watermarkedUrl: string | undefined;
+      let rrUrl: string | undefined;
 
-          // ALL selected images get Matthews logo watermark.
-          // RR (Representative Rendering) is the optional toggle:
-          //   - RR version: image + "Representative Rendering" text (internal)
-          //   - WM version: image + Matthews logo + "Representative Rendering" text (3rd party)
-          // Non-RR: WM version = image + Matthews logo only
-          if (img.repRendering) {
-            // RR version: "Representative Rendering" text overlay only
-            let rrBuffer = await repRenderingWatermark(imgBuffer);
-            if (compress) rrBuffer = await compressImage(rrBuffer, 80);
-            const rrFilename = `${slug}/final/image-${i}-rr.${ext}`;
-            const rrBlob = await put(rrFilename, rrBuffer, {
-              access: 'public',
-              contentType,
-              addRandomSuffix: false,
-              allowOverwrite: true,
-            });
-            rrUrl = rrBlob.url;
+      // ALL selected images get Matthews logo watermark.
+      // RR (Representative Rendering) is the optional toggle:
+      //   - RR version: image + "Representative Rendering" text (internal)
+      //   - WM version: image + Matthews logo + "Representative Rendering" text (3rd party)
+      // Non-RR: WM version = image + Matthews logo only
+      if (img.repRendering) {
+        // RR version: "Representative Rendering" text overlay only
+        let rrBuffer = await repRenderingWatermark(imgBuffer);
+        if (compress) rrBuffer = await compressImage(rrBuffer, 80);
+        const rrFilename = `${slug}/final/image-${i}-rr.${ext}`;
+        const rrBlob = await put(rrFilename, rrBuffer, {
+          access: 'public',
+          contentType,
+          addRandomSuffix: true,
+        });
+        rrUrl = rrBlob.url;
 
-            // WM version: Matthews logo + "Representative Rendering" text (for third parties)
-            let wmBuffer = await watermarkImage(imgBuffer);
-            wmBuffer = await repRenderingWatermark(wmBuffer);
-            if (compress) wmBuffer = await compressImage(wmBuffer, 80);
-            const wmFilename = `${slug}/final/image-${i}-watermarked.${ext}`;
-            const wmBlob = await put(wmFilename, wmBuffer, {
-              access: 'public',
-              contentType,
-              addRandomSuffix: false,
-              allowOverwrite: true,
-            });
-            watermarkedUrl = wmBlob.url;
-          } else {
-            // WM only: Matthews logo watermark (always applied)
-            let watermarked = await watermarkImage(imgBuffer);
-            if (compress) watermarked = await compressImage(watermarked, 80);
-            const wmFilename = `${slug}/final/image-${i}-watermarked.${ext}`;
-            const wmBlob = await put(wmFilename, watermarked, {
-              access: 'public',
-              contentType,
-              addRandomSuffix: false,
-              allowOverwrite: true,
-            });
-            watermarkedUrl = wmBlob.url;
-          }
+        // WM version: Matthews logo + "Representative Rendering" text (for third parties)
+        let wmBuffer = await watermarkImage(imgBuffer);
+        wmBuffer = await repRenderingWatermark(wmBuffer);
+        if (compress) wmBuffer = await compressImage(wmBuffer, 80);
+        const wmFilename = `${slug}/final/image-${i}-watermarked.${ext}`;
+        const wmBlob = await put(wmFilename, wmBuffer, {
+          access: 'public',
+          contentType,
+          addRandomSuffix: true,
+        });
+        watermarkedUrl = wmBlob.url;
+      } else {
+        // WM only: Matthews logo watermark (always applied)
+        let watermarked = await watermarkImage(imgBuffer);
+        if (compress) watermarked = await compressImage(watermarked, 80);
+        const wmFilename = `${slug}/final/image-${i}-watermarked.${ext}`;
+        const wmBlob = await put(wmFilename, watermarked, {
+          access: 'public',
+          contentType,
+          addRandomSuffix: true,
+        });
+        watermarkedUrl = wmBlob.url;
+      }
 
-          return {
-            originalUrl: originalBlob.url,
-            watermarkedUrl,
-            rrUrl,
-            filename: `image-${i}.${ext}`,
-            hasWatermark: true,
-            hasRepRendering: !!img.repRendering,
-          };
-        })
-      );
-      finalImages.push(...batchResults);
+      finalImages.push({
+        originalUrl: originalBlob.url,
+        watermarkedUrl,
+        rrUrl,
+        filename: `image-${i}.${ext}`,
+        hasWatermark: true,
+        hasRepRendering: !!img.repRendering,
+      });
     }
 
     // 3. Clean up unselected original blobs (fire-and-forget)
