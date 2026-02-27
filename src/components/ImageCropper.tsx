@@ -199,8 +199,8 @@ export default function ImageCropper({ images, onComplete, onCancel }: CropperMo
                     alt={`Image ${idx + 1}`}
                     className="w-full aspect-video object-cover"
                   />
-                  {/* Position # + arrows (top-left) */}
-                  <div className="absolute top-1.5 left-1.5 flex items-center gap-1">
+                  {/* Position # + arrows (top-left) — z-20 so above re-crop overlay */}
+                  <div className="absolute top-1.5 left-1.5 z-20 flex items-center gap-1">
                     <span className="bg-black/70 text-white text-xs font-bold w-6 h-6 rounded-full flex items-center justify-center">
                       {idx + 1}
                     </span>
