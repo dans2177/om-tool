@@ -36,12 +36,12 @@ export async function POST(req: NextRequest) {
     const password = process.env.MARKETING_PDF_LOCK_PASSWORD || 'Matthews841';
 
     // 1. Lock & compress the PDF via Python pikepdf (preserves links & formatting)
-    //    The Python function lives at /api/lock-pdf (Vercel Python runtime)
-    const vercelUrl = process.env.VERCEL_URL;
-    const protocol = vercelUrl?.includes('localhost') ? 'http' : 'https';
-    const baseUrl = vercelUrl
-      ? `${protocol}://${vercelUrl}`
-      : `http://localhost:3000`;
+    //    Uses the request host header for the most reliable internal URL
+    const host = req.headers.get('host') || process.env.VERCEL_URL || 'localhost:3000';
+    const protocol = host.includes('localhost') ? 'http' : 'https';
+    const baseUrl = `${protocol}://${host}`;
+
+    console.log(`Calling Python lock-pdf at: ${baseUrl}/api/lock-pdf`);
 
     const lockResponse = await fetch(`${baseUrl}/api/lock-pdf`, {
       method: 'POST',
@@ -55,8 +55,15 @@ export async function POST(req: NextRequest) {
     });
 
     if (!lockResponse.ok) {
-      const errBody = await lockResponse.json().catch(() => ({ error: 'PDF lock request failed' }));
-      throw new Error(errBody.error || `PDF lock failed (${lockResponse.status})`);
+      const errText = await lockResponse.text();
+      console.error(`lock-pdf responded ${lockResponse.status}: ${errText}`);
+      let errMsg: string;
+      try {
+        errMsg = JSON.parse(errText).error || `PDF lock failed (${lockResponse.status})`;
+      } catch {
+        errMsg = `PDF lock failed (${lockResponse.status}): ${errText.slice(0, 200)}`;
+      }
+      throw new Error(errMsg);
     }
 
     const lockResult = await lockResponse.json();
