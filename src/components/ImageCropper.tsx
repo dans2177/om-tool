@@ -20,10 +20,9 @@ interface CropperModalProps {
 const MIN_CROP_PX = 1080;
 
 /**
- * Maximum output dimension. Caps huge crops so the JPEG blob stays
- * well under the 4.5 MB serverless body limit.
+ * Maximum output dimension. No cap — pass through at native resolution.
+ * The finalize step compresses separately.
  */
-const MAX_CROP_PX = 3600;
 
 /** Create a cropped image blob from a source URL + pixel crop area */
 async function getCroppedBlob(imageSrc: string, cropArea: Area): Promise<Blob> {
@@ -35,20 +34,8 @@ async function getCroppedBlob(imageSrc: string, cropArea: Area): Promise<Blob> {
     image.src = imageSrc;
   });
 
-  let outW = cropArea.width;
-  let outH = cropArea.height;
-
-  if (outW < MIN_CROP_PX || outH < MIN_CROP_PX) {
-    const scale = Math.max(MIN_CROP_PX / outW, MIN_CROP_PX / outH);
-    outW = Math.round(outW * scale);
-    outH = Math.round(outH * scale);
-  }
-
-  if (outW > MAX_CROP_PX || outH > MAX_CROP_PX) {
-    const scale = Math.min(MAX_CROP_PX / outW, MAX_CROP_PX / outH);
-    outW = Math.round(outW * scale);
-    outH = Math.round(outH * scale);
-  }
+  const outW = cropArea.width;
+  const outH = cropArea.height;
 
   const canvas = document.createElement('canvas');
   canvas.width = outW;
@@ -61,7 +48,7 @@ async function getCroppedBlob(imageSrc: string, cropArea: Area): Promise<Blob> {
     canvas.toBlob(
       (blob) => (blob ? resolve(blob) : reject(new Error('Canvas toBlob failed'))),
       'image/jpeg',
-      0.88,
+      0.92,
     );
   });
 }

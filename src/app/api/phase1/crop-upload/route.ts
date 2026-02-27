@@ -4,9 +4,6 @@ import sharp from 'sharp';
 
 export const maxDuration = 60;
 
-/** Minimum output dimension – ensures cropped images meet pixel requirements */
-const MIN_DIMENSION = 1080;
-
 export async function POST(req: NextRequest) {
   try {
     const formData = await req.formData();
@@ -20,25 +17,10 @@ export async function POST(req: NextRequest) {
 
     const rawBuffer = Buffer.from(await file.arrayBuffer());
 
-    // ── Resize if needed & compress ────────────────────────────
-    const meta = await sharp(rawBuffer).metadata();
-    const w = meta.width || 0;
-    const h = meta.height || 0;
-
-    let pipeline = sharp(rawBuffer);
-
-    // Up-scale if either dimension is below the minimum
-    if (w < MIN_DIMENSION || h < MIN_DIMENSION) {
-      // Scale so the *smaller* side hits MIN_DIMENSION
-      if (w <= h) {
-        pipeline = pipeline.resize({ width: MIN_DIMENSION });
-      } else {
-        pipeline = pipeline.resize({ height: MIN_DIMENSION });
-      }
-    }
-
-    // Compress to high-quality JPEG (keeps file size manageable)
-    const compressed = await pipeline.jpeg({ quality: 90, mozjpeg: true }).toBuffer();
+    // Light JPEG compress — no resize restrictions, finalize handles final compression
+    const compressed = await sharp(rawBuffer)
+      .jpeg({ quality: 92, mozjpeg: true })
+      .toBuffer();
 
     const filename = `${slug}/cropped-${imageId}.jpg`;
 
