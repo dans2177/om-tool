@@ -701,7 +701,7 @@ export default function ReviewPage() {
                     {[
                       { label: 'Name', value: brokerOfRecord.name, copy: brokerOfRecord.name },
                       { label: 'Company', value: brokerOfRecord.company, copy: brokerOfRecord.company },
-                      { label: 'Firm & License', value: `License # ${[brokerOfRecord.firm_number, brokerOfRecord.license_number].filter(Boolean).join(', ')}${omData.address?.state_abbr ? ` (${omData.address.state_abbr})` : ''}`, copy: `License # ${[brokerOfRecord.firm_number, brokerOfRecord.license_number].filter(Boolean).join(', ')}${omData.address?.state_abbr ? ` (${omData.address.state_abbr})` : ''}` },
+                      { label: 'Firm & License', value: `License # ${[brokerOfRecord.firm_number, brokerOfRecord.license_number].filter(Boolean).join(', ')}${omData.address?.state_abbr ? ` (${omData.address.state_abbr})` : ''}`, copy: [brokerOfRecord.firm_number, brokerOfRecord.license_number].filter(Boolean).join(', ') },
                       { label: 'Address', value: brokerOfRecord.address, copy: brokerOfRecord.address },
                       { label: 'Phone', value: '(866) 889-0550', copy: '(866) 889-0550' },
                     ].map((row) => (
@@ -1097,6 +1097,8 @@ export default function ReviewPage() {
                       className="relative group rounded-xl overflow-hidden border border-gray-100 cursor-pointer"
                       onClick={() => setLightboxImg(img.rrUrl || img.watermarkedUrl || img.originalUrl)}
                     >
+                      {/* Position badge */}
+                      <span className="absolute top-1.5 left-1.5 z-10 bg-black/60 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-md">#{i + 1}</span>
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img
                         src={img.rrUrl || img.watermarkedUrl || img.originalUrl}
