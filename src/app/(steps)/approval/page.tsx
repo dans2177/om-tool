@@ -154,10 +154,11 @@ export default function ApprovalPage() {
     // Reorder the images to match the order set in the cropper review
     if (orderedIds.length > 0) {
       const idToImage = new Map(updatedImages.map(img => [img.id, img]));
-      // Put ordered (selected) images first in that exact order, then unselected after
+      const orderedIdSet = new Set(orderedIds);
+      // Put ordered (selected) images first in the exact user order, then everything else
       const ordered = orderedIds.map(id => idToImage.get(id)).filter(Boolean) as typeof updatedImages;
-      const unselected = updatedImages.filter(img => !img.selected);
-      updatedImages = [...ordered, ...unselected];
+      const rest = updatedImages.filter(img => !orderedIdSet.has(img.id));
+      updatedImages = [...ordered, ...rest];
       setImages(updatedImages);
     }
 

@@ -105,10 +105,11 @@ export async function POST(req: NextRequest) {
           let watermarkedUrl: string | undefined;
           let rrUrl: string | undefined;
 
-          // For RR (Representative Rendering):
-          //   - RR version: image + "Representative Rendering" text (for internal use)
-          //   - WM version: image + Matthews logo + "Representative Rendering" text (for third parties)
-          // For WM only (no RR): image + Matthews logo watermark
+          // ALL selected images get Matthews logo watermark.
+          // RR (Representative Rendering) is the optional toggle:
+          //   - RR version: image + "Representative Rendering" text (internal)
+          //   - WM version: image + Matthews logo + "Representative Rendering" text (3rd party)
+          // Non-RR: WM version = image + Matthews logo only
           if (img.repRendering) {
             // RR version: "Representative Rendering" text overlay only
             let rrBuffer = await repRenderingWatermark(imgBuffer);
@@ -134,8 +135,8 @@ export async function POST(req: NextRequest) {
               allowOverwrite: true,
             });
             watermarkedUrl = wmBlob.url;
-          } else if (img.watermark) {
-            // WM only: Matthews logo watermark
+          } else {
+            // WM only: Matthews logo watermark (always applied)
             let watermarked = await watermarkImage(imgBuffer);
             if (compress) watermarked = await compressImage(watermarked, 80);
             const wmFilename = `${slug}/final/image-${i}-watermarked.${ext}`;
@@ -153,7 +154,7 @@ export async function POST(req: NextRequest) {
             watermarkedUrl,
             rrUrl,
             filename: `image-${i}.${ext}`,
-            hasWatermark: !!img.watermark || !!img.repRendering,
+            hasWatermark: true,
             hasRepRendering: !!img.repRendering,
           };
         })
