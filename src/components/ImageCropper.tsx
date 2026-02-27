@@ -3,13 +3,12 @@
 import { useState, useCallback } from 'react';
 import Cropper from 'react-easy-crop';
 import type { Area } from 'react-easy-crop';
-import { ChevronLeft, ChevronRight, Crop, SkipForward, X, Check, RotateCcw, GripVertical } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Crop, SkipForward, X, Check, RotateCcw } from 'lucide-react';
 
 interface CropperModalProps {
   images: { id: string; blobUrl: string }[];
-  onComplete: (croppedBlobs: Map<string, Blob>) => void;
+  onComplete: (croppedBlobs: Map<string, Blob>, orderedIds: string[]) => void;
   onCancel: () => void;
-  onReorder?: (fromIdx: number, toIdx: number) => void;
 }
 
 /**
@@ -64,7 +63,7 @@ async function blobToPreview(blob: Blob): Promise<string> {
 
 type CropDecision = { type: 'cropped'; blob: Blob; preview: string } | { type: 'skipped' };
 
-export default function ImageCropper({ images, onComplete, onCancel, onReorder }: CropperModalProps) {
+export default function ImageCropper({ images, onComplete, onCancel }: CropperModalProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [crop, setCrop] = useState({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(1);
@@ -77,9 +76,8 @@ export default function ImageCropper({ images, onComplete, onCancel, onReorder }
   // Review mode — after all images have been visited
   const [reviewing, setReviewing] = useState(false);
 
-  // Drag-and-drop reorder state for review grid
-  const [dragIdx, setDragIdx] = useState<number | null>(null);
-  const [dragOverIdx, setDragOverIdx] = useState<number | null>(null);
+  // Local ordered list of images (arrow reorder happens here, no parent re-renders)
+  const [orderedImages, setOrderedImages] = useState(() => [...images]);
 
   const currentImage = images[currentIndex];
 
@@ -139,7 +137,18 @@ export default function ImageCropper({ images, onComplete, onCancel, onReorder }
     goToImage(idx);
   };
 
-  /** Final approval — build the results map and call onComplete */
+  /** Move an image up/down in the local order */
+  const moveImage = (idx: number, direction: 'up' | 'down') => {
+    const targetIdx = direction === 'up' ? idx - 1 : idx + 1;
+    setOrderedImages(prev => {
+      if (targetIdx < 0 || targetIdx >= prev.length) return prev;
+      const arr = [...prev];
+      [arr[idx], arr[targetIdx]] = [arr[targetIdx], arr[idx]];
+      return arr;
+    });
+  };
+
+  /** Final approval — build the results map and call onComplete with final order */
   const handleApprove = () => {
     const results = new Map<string, Blob>();
     for (const [id, decision] of decisions.entries()) {
@@ -147,7 +156,7 @@ export default function ImageCropper({ images, onComplete, onCancel, onReorder }
         results.set(id, decision.blob);
       }
     }
-    onComplete(results);
+    onComplete(results, orderedImages.map(img => img.id));
   };
 
   // ── Review screen ──────────────────────────────────────────────
@@ -174,42 +183,50 @@ export default function ImageCropper({ images, onComplete, onCancel, onReorder }
           </button>
         </div>
 
-        {/* Thumbnails grid — drag-and-drop reorderable */}
+        {/* Thumbnails grid — arrow reorderable */}
         <div className="flex-1 overflow-y-auto p-6">
-          <p className="text-white/40 text-xs text-center mb-3">Drag images to reorder. Order here = final output order.</p>
+          <p className="text-white/40 text-xs text-center mb-3">Use arrows to reorder. This order = final output order on the review page.</p>
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 max-w-6xl mx-auto">
-            {images.map((img, idx) => {
+            {orderedImages.map((img, idx) => {
               const decision = decisions.get(img.id);
               const isCropped = decision?.type === 'cropped';
               const previewSrc = isCropped ? decision.preview : img.blobUrl;
 
               return (
-                <div
-                  key={img.id}
-                  draggable
-                  onDragStart={() => setDragIdx(idx)}
-                  onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; if (idx !== dragOverIdx) setDragOverIdx(idx); }}
-                  onDrop={(e) => {
-                    e.preventDefault();
-                    if (dragIdx !== null && dragIdx !== idx && onReorder) {
-                      onReorder(dragIdx, idx);
-                    }
-                    setDragIdx(null);
-                    setDragOverIdx(null);
-                  }}
-                  onDragEnd={() => { setDragIdx(null); setDragOverIdx(null); }}
-                  className={`relative group rounded-xl overflow-hidden border-2 transition-all ${
-                    dragIdx === idx ? 'opacity-40 scale-95 border-white/10' : 'border-white/10 hover:border-white/30'
-                  } ${dragOverIdx === idx && dragIdx !== idx ? 'ring-4 ring-blue-400 border-blue-400 scale-105' : ''}`}
-                >
+                <div key={img.id} className="relative group rounded-xl overflow-hidden border-2 border-white/10 hover:border-white/30 transition-all">
                   <img
                     src={previewSrc}
                     alt={`Image ${idx + 1}`}
                     className="w-full aspect-video object-cover"
                   />
-                  {/* Badge */}
-                  <div className="absolute top-2 left-2 flex items-center gap-1">
-                    <GripVertical className="w-3.5 h-3.5 text-white/60 cursor-grab active:cursor-grabbing" />
+                  {/* Position # + arrows (top-left) */}
+                  <div className="absolute top-1.5 left-1.5 flex items-center gap-1">
+                    <span className="bg-black/70 text-white text-xs font-bold w-6 h-6 rounded-full flex items-center justify-center">
+                      {idx + 1}
+                    </span>
+                    <div className="flex flex-col gap-0.5">
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); moveImage(idx, 'up'); }}
+                        disabled={idx === 0}
+                        className="p-0.5 rounded bg-black/60 text-white/80 hover:bg-blue-600 hover:text-white disabled:opacity-20 disabled:cursor-not-allowed transition-colors"
+                        title="Move up"
+                      >
+                        <ChevronUp className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); moveImage(idx, 'down'); }}
+                        disabled={idx === orderedImages.length - 1}
+                        className="p-0.5 rounded bg-black/60 text-white/80 hover:bg-blue-600 hover:text-white disabled:opacity-20 disabled:cursor-not-allowed transition-colors"
+                        title="Move down"
+                      >
+                        <ChevronDown className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                  {/* Cropped/Original badge (top-right) */}
+                  <div className="absolute top-2 right-2">
                     <span
                       className={`text-xs font-medium px-2 py-0.5 rounded-full ${
                         isCropped
@@ -222,7 +239,10 @@ export default function ImageCropper({ images, onComplete, onCancel, onReorder }
                   </div>
                   {/* Re-edit button */}
                   <button
-                    onClick={() => handleReEdit(idx)}
+                    onClick={() => {
+                      const origIdx = images.findIndex(i => i.id === img.id);
+                      if (origIdx >= 0) handleReEdit(origIdx);
+                    }}
                     className="absolute inset-0 flex items-center justify-center bg-black/0 group-hover:bg-black/50 transition-colors"
                   >
                     <span className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-2 text-white text-sm font-medium bg-white/20 backdrop-blur-sm px-4 py-2 rounded-xl">
@@ -230,10 +250,6 @@ export default function ImageCropper({ images, onComplete, onCancel, onReorder }
                       Re-crop
                     </span>
                   </button>
-                  {/* Number badge */}
-                  <div className="absolute top-2 right-2 bg-black/60 text-white/80 text-xs w-6 h-6 rounded-full flex items-center justify-center">
-                    {idx + 1}
-                  </div>
                 </div>
               );
             })}

@@ -111,7 +111,7 @@ export default function ApprovalPage() {
     setShowCropper(true);
   };
 
-  const handleCropComplete = async (croppedBlobs: Map<string, Blob>) => {
+  const handleCropComplete = async (croppedBlobs: Map<string, Blob>, orderedIds: string[]) => {
     setShowCropper(false);
 
     // Build an updated images array with cropped blobUrls
@@ -149,6 +149,16 @@ export default function ApprovalPage() {
         return;
       }
       setLoading(false);
+    }
+
+    // Reorder the images to match the order set in the cropper review
+    if (orderedIds.length > 0) {
+      const idToImage = new Map(updatedImages.map(img => [img.id, img]));
+      // Put ordered (selected) images first in that exact order, then unselected after
+      const ordered = orderedIds.map(id => idToImage.get(id)).filter(Boolean) as typeof updatedImages;
+      const unselected = updatedImages.filter(img => !img.selected);
+      updatedImages = [...ordered, ...unselected];
+      setImages(updatedImages);
     }
 
     // Proceed with finalization using the updated images
@@ -374,22 +384,6 @@ export default function ApprovalPage() {
           images={images.filter((i) => i.selected)}
           onComplete={handleCropComplete}
           onCancel={() => setShowCropper(false)}
-          onReorder={(fromIdx, toIdx) => {
-            // Map from selected-only indices back to the full images array
-            const selectedImages = images.filter((i) => i.selected);
-            const fromId = selectedImages[fromIdx]?.id;
-            const toId = selectedImages[toIdx]?.id;
-            if (!fromId || !toId) return;
-            setImages(prev => {
-              const updated = [...prev];
-              const fromFull = updated.findIndex(i => i.id === fromId);
-              const toFull = updated.findIndex(i => i.id === toId);
-              if (fromFull < 0 || toFull < 0) return prev;
-              const [moved] = updated.splice(fromFull, 1);
-              updated.splice(toFull, 0, moved);
-              return updated;
-            });
-          }}
         />
       )}
 
