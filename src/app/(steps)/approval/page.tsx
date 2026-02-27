@@ -44,22 +44,10 @@ export default function ApprovalPage() {
     );
   };
 
-  const toggleWatermark = (id: string) => {
+  const toggleRepRendering = (id: string) => {
     setImages((prev) =>
       prev.map((img) =>
-        img.id === id
-          ? { ...img, watermark: !img.watermark }
-          : img
-      )
-    );
-  };
-
-
-
-  const toggleRepPhoto = (id: string) => {
-    setImages((prev) =>
-      prev.map((img) =>
-        img.id === id ? { ...img, repPhoto: !img.repPhoto } : img
+        img.id === id ? { ...img, repRendering: !img.repRendering } : img
       )
     );
   };
@@ -102,8 +90,8 @@ export default function ApprovalPage() {
           ...data.images.map((img: any) => ({
             ...img,
             selected: true,
-            watermark: false as const,
-            repPhoto: false,
+            watermark: true as const,
+            repRendering: false,
           })),
         ]);
         addStep(`✅ ${data.images.length} image${data.images.length !== 1 ? 's' : ''} ready`);
@@ -335,22 +323,12 @@ export default function ApprovalPage() {
                     <label className="flex items-center gap-2 text-sm cursor-pointer text-gray-600">
                       <input
                         type="checkbox"
-                        checked={!!img.watermark}
-                        onChange={() => toggleWatermark(img.id)}
+                        checked={!!img.repRendering}
+                        onChange={() => toggleRepRendering(img.id)}
                         className="rounded border-gray-300 text-blue-600"
                       />
-                      Watermark
+                      Rep. Rendering
                     </label>
-                    <label className="flex items-center gap-2 text-sm cursor-pointer text-gray-600">
-                      <input
-                        type="checkbox"
-                        checked={!!img.repPhoto}
-                        onChange={() => toggleRepPhoto(img.id)}
-                        className="rounded border-gray-300 text-blue-600"
-                      />
-                      Rep. Photo
-                    </label>
-
                   </div>
                 )}
                 <div

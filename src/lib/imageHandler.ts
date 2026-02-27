@@ -3,7 +3,6 @@ import sharp from 'sharp';
 import { PDFDocument } from 'pdf-lib';
 import path from 'path';
 import fs from 'fs';
-import { encryptPDFRestricted } from '@/lib/pdfEncrypt';
 import { ensurePolyfills } from '@/lib/ensurePolyfills';
 
 export interface ExtractedImageInfo {
@@ -143,7 +142,7 @@ export async function extractImagesFromPDF(
  */
 export async function compressImage(
   imageBuffer: Buffer,
-  quality: number = 80
+  quality: number = 85
 ): Promise<Buffer> {
   try {
     return await sharp(imageBuffer).jpeg({ quality }).toBuffer();
@@ -167,10 +166,10 @@ export async function compressImage(
 export async function watermarkImage(
   imageBuffer: Buffer,
 ): Promise<Buffer> {
-  const logoPath = path.join(process.cwd(), 'public', 'logo.png');
+  const logoPath = path.join(process.cwd(), 'public', 'matthews-logo.png');
 
   if (!fs.existsSync(logoPath)) {
-    console.warn('watermarkImage: public/logo.png not found, skipping watermark');
+    console.warn('watermarkImage: public/matthews-logo.png not found, skipping watermark');
     return imageBuffer;
   }
 
@@ -201,7 +200,7 @@ export async function watermarkImage(
   const logoW = logoMeta.width || logoWidth;
   const logoH = logoMeta.height || Math.floor(logoWidth / 3);
 
-  // Position at bottom-right with explicit padding (like repPhotoWatermark)
+  // Position at bottom-right with explicit padding (like repRenderingWatermark)
   const padding = Math.max(15, Math.floor(imgWidth * 0.03));
   const left = Math.max(0, imgWidth - logoW - padding);
   const top = Math.max(0, imgHeight - logoH - padding);
@@ -212,20 +211,20 @@ export async function watermarkImage(
 }
 
 /**
- * Apply a "Representative Photo" text watermark to the bottom-left of an image.
+ * Apply a "Representative Rendering" text watermark to the bottom-left of an image.
  * Stacks with the logo watermark (bottom-right).
  *
- * Uses a pre-rendered PNG (public/rep-photo.png) to avoid font-availability
+ * Uses a pre-rendered PNG (public/rep-rendering.png) to avoid font-availability
  * issues on Vercel serverless (Amazon Linux has almost no fonts).
  * Regenerate with: node scripts/gen-rep-photo.js
  */
-export async function repPhotoWatermark(
+export async function repRenderingWatermark(
   imageBuffer: Buffer,
 ): Promise<Buffer> {
-  const repPath = path.join(process.cwd(), 'public', 'rep-photo.png');
+  const repPath = path.join(process.cwd(), 'public', 'rep-rendering.png');
 
   if (!fs.existsSync(repPath)) {
-    console.warn('repPhotoWatermark: public/rep-photo.png not found, skipping');
+    console.warn('repRenderingWatermark: public/rep-rendering.png not found, skipping');
     return imageBuffer;
   }
 
@@ -258,8 +257,8 @@ export async function repPhotoWatermark(
  * Download image from a blob URL and return as Buffer.
  */
 export async function downloadImage(url: string): Promise<Buffer> {
-  const MAX_RETRIES = 3;
-  const RETRY_DELAY_MS = 1500;
+  const MAX_RETRIES = 5;
+  const RETRY_DELAY_MS = 2000;
 
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
     const response = await fetch(url, {
@@ -291,20 +290,5 @@ export async function downloadImage(url: string): Promise<Buffer> {
   throw new Error(`Failed to download image after ${MAX_RETRIES} retries: ${url}`);
 }
 
-/**
- * Lock a PDF with restrictive permissions.
- * Empty user password = opens without prompting.
- * Owner password = restricts editing/copying in compliant viewers.
- *
- * Permissions: print only. Blocks modify, copy, text selection, annotations.
- * NOTE: Chrome/Preview ignore owner-only restrictions by design.
- * Adobe Acrobat and other compliant readers WILL enforce them.
- */
-export async function lockPDF(
-  pdfBuffer: Buffer,
-  ownerPassword: string
-): Promise<Buffer> {
-  const pdfBytes = new Uint8Array(pdfBuffer);
-  const encrypted = await encryptPDFRestricted(pdfBytes, '', ownerPassword);
-  return Buffer.from(encrypted);
-}
+// PDF locking is now handled by the Python pikepdf endpoint at /api/lock-pdf
+// This preserves all links, bookmarks, and formatting unlike the old JS approach.

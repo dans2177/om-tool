@@ -168,15 +168,16 @@ export interface ExtractedImage {
   height: number;
   selected: boolean;
   watermark: boolean;
-  repPhoto: boolean;
+  repRendering: boolean;
 }
 
 export interface FinalizedImage {
   originalUrl: string;
   watermarkedUrl?: string;
+  rrUrl?: string;
   filename: string;
   hasWatermark: boolean;
-  hasRepPhoto: boolean;
+  hasRepRendering: boolean;
 }
 
 export interface ExtractionResult {

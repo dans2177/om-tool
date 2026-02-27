@@ -4,8 +4,7 @@ import {
   downloadImage,
   compressImage,
   watermarkImage,
-  repPhotoWatermark,
-  lockPDF,
+  repRenderingWatermark,
 } from '@/lib/imageHandler';
 
 export const maxDuration = 300;
@@ -16,7 +15,7 @@ interface ImageInput {
   blobUrl: string;
   selected: boolean;
   watermark: boolean;
-  repPhoto?: boolean;
+  repRendering?: boolean;
 }
 
 export async function POST(req: NextRequest) {
@@ -34,29 +33,47 @@ export async function POST(req: NextRequest) {
       compress: boolean;
     } = body;
 
-    const password = process.env.MARKETING_PDF_LOCK_PASSWORD || 'MATTHEWS-TEST';
+    const password = process.env.MARKETING_PDF_LOCK_PASSWORD || 'Matthews841';
 
-    // 1. Lock the PDF
-    const pdfResponse = await fetch(pdfBlobUrl, { cache: 'no-store' });
-    const pdfArrayBuf = await pdfResponse.arrayBuffer();
-    const pdfBuffer = Buffer.from(pdfArrayBuf);
+    // 1. Lock & compress the PDF via Python pikepdf (preserves links & formatting)
+    const vercelUrl = process.env.VERCEL_URL;
+    const protocol = vercelUrl?.includes('localhost') ? 'http' : 'https';
+    const baseUrl = vercelUrl
+      ? `${protocol}://${vercelUrl}`
+      : `http://localhost:3000`;
 
-    const lockedPdf = await lockPDF(pdfBuffer, password);
-    const lockedBlob = await put(`${slug}/locked-om.pdf`, lockedPdf, {
-      access: 'public',
-      contentType: 'application/pdf',
-      addRandomSuffix: false,
-      allowOverwrite: true,
+    const lockResponse = await fetch(`${baseUrl}/api/phase1/lock-pdf`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        pdfUrl: pdfBlobUrl,
+        slug,
+        ownerPassword: password,
+        userPassword: '',
+      }),
     });
+
+    if (!lockResponse.ok) {
+      const errBody = await lockResponse.json().catch(() => ({ error: 'PDF lock request failed' }));
+      throw new Error(errBody.error || `PDF lock failed (${lockResponse.status})`);
+    }
+
+    const lockResult = await lockResponse.json();
+    const lockedPdfUrl: string = lockResult.lockedPdfUrl;
+
+    console.log(
+      `PDF locked & compressed: ${lockResult.originalSize} → ${lockResult.lockedSize} bytes`
+    );
 
     // 2. Process selected images
     const selectedImages = images.filter((img) => img.selected);
     const finalImages: {
       originalUrl: string;
       watermarkedUrl?: string;
+      rrUrl?: string;
       filename: string;
       hasWatermark: boolean;
-      hasRepPhoto: boolean;
+      hasRepRendering: boolean;
     }[] = [];
 
     // Process images in parallel batches of 5
@@ -86,22 +103,41 @@ export async function POST(req: NextRequest) {
           });
 
           let watermarkedUrl: string | undefined;
+          let rrUrl: string | undefined;
 
-          if (img.watermark || img.repPhoto) {
-            let watermarked = imgBuffer;
+          // For RR (Representative Rendering):
+          //   - RR version: image + "Representative Rendering" text (for internal use)
+          //   - WM version: image + Matthews logo + "Representative Rendering" text (for third parties)
+          // For WM only (no RR): image + Matthews logo watermark
+          if (img.repRendering) {
+            // RR version: "Representative Rendering" text overlay only
+            let rrBuffer = await repRenderingWatermark(imgBuffer);
+            if (compress) rrBuffer = await compressImage(rrBuffer, 80);
+            const rrFilename = `${slug}/final/image-${i}-rr.${ext}`;
+            const rrBlob = await put(rrFilename, rrBuffer, {
+              access: 'public',
+              contentType,
+              addRandomSuffix: false,
+              allowOverwrite: true,
+            });
+            rrUrl = rrBlob.url;
 
-            if (img.watermark) {
-              watermarked = await watermarkImage(watermarked);
-            }
-
-            if (img.repPhoto) {
-              watermarked = await repPhotoWatermark(watermarked);
-            }
-
-            if (compress) {
-              watermarked = await compressImage(watermarked, 80);
-            }
-
+            // WM version: Matthews logo + "Representative Rendering" text (for third parties)
+            let wmBuffer = await watermarkImage(imgBuffer);
+            wmBuffer = await repRenderingWatermark(wmBuffer);
+            if (compress) wmBuffer = await compressImage(wmBuffer, 80);
+            const wmFilename = `${slug}/final/image-${i}-watermarked.${ext}`;
+            const wmBlob = await put(wmFilename, wmBuffer, {
+              access: 'public',
+              contentType,
+              addRandomSuffix: false,
+              allowOverwrite: true,
+            });
+            watermarkedUrl = wmBlob.url;
+          } else if (img.watermark) {
+            // WM only: Matthews logo watermark
+            let watermarked = await watermarkImage(imgBuffer);
+            if (compress) watermarked = await compressImage(watermarked, 80);
             const wmFilename = `${slug}/final/image-${i}-watermarked.${ext}`;
             const wmBlob = await put(wmFilename, watermarked, {
               access: 'public',
@@ -115,9 +151,10 @@ export async function POST(req: NextRequest) {
           return {
             originalUrl: originalBlob.url,
             watermarkedUrl,
+            rrUrl,
             filename: `image-${i}.${ext}`,
-            hasWatermark: !!img.watermark,
-            hasRepPhoto: !!img.repPhoto,
+            hasWatermark: !!img.watermark || !!img.repRendering,
+            hasRepRendering: !!img.repRendering,
           };
         })
       );
@@ -135,7 +172,7 @@ export async function POST(req: NextRequest) {
     }
 
     return NextResponse.json({
-      lockedPdfUrl: lockedBlob.url,
+      lockedPdfUrl: lockedPdfUrl,
       images: finalImages,
     });
   } catch (error: any) {

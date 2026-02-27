@@ -24,7 +24,7 @@ interface OMContextType {
 
   // Extraction
   omData: OMData | null;
-  setOmData: (v: OMData | null) => void;
+  setOmData: React.Dispatch<React.SetStateAction<OMData | null>>;
   images: ExtractedImage[];
   setImages: React.Dispatch<React.SetStateAction<ExtractedImage[]>>;
   pdfBlobUrl: string;

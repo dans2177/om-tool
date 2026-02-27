@@ -131,8 +131,8 @@ export async function POST(req: NextRequest) {
           images: extractedImages.map((img) => ({
             ...img,
             selected: false,
-            watermark: false,
-            repPhoto: false,
+            watermark: true,
+            repRendering: false,
           })),
         });
         await send('progress', { step: 'images-done', message: `✅ ${extractedImages.length} image${extractedImages.length !== 1 ? 's' : ''} extracted & uploaded to cloud` });

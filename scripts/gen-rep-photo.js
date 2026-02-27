@@ -2,7 +2,7 @@ const sharp = require('sharp');
 const fs = require('fs');
 
 async function main() {
-  const text = '<span font_weight="bold" font="48" foreground="white">Representative Photo</span>';
+  const text = '<span font_weight="bold" font="48" foreground="white">Representative Rendering</span>';
 
   const textImg = await sharp({
     text: { text, font: 'Helvetica', rgba: true, dpi: 144 },
@@ -37,9 +37,9 @@ async function main() {
     .png()
     .toBuffer();
 
-  fs.writeFileSync('public/rep-photo.png', final);
+  fs.writeFileSync('public/rep-rendering.png', final);
   const finalMeta = await sharp(final).metadata();
-  console.log('Final PNG:', finalMeta.width, 'x', finalMeta.height, '- saved to public/rep-photo.png');
+  console.log('Final PNG:', finalMeta.width, 'x', finalMeta.height, '- saved to public/rep-rendering.png');
 }
 
 main().catch((e) => { console.error(e); process.exit(1); });

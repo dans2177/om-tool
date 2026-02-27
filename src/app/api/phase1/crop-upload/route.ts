@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { put } from '@vercel/blob';
+import sharp from 'sharp';
 
 export const maxDuration = 60;
+
+/** Minimum output dimension – ensures cropped images meet pixel requirements */
+const MIN_DIMENSION = 1080;
 
 export async function POST(req: NextRequest) {
   try {
@@ -14,17 +18,37 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Missing slug, imageId, or file' }, { status: 400 });
     }
 
-    const buffer = Buffer.from(await file.arrayBuffer());
+    const rawBuffer = Buffer.from(await file.arrayBuffer());
+
+    // ── Resize if needed & compress ────────────────────────────
+    const meta = await sharp(rawBuffer).metadata();
+    const w = meta.width || 0;
+    const h = meta.height || 0;
+
+    let pipeline = sharp(rawBuffer);
+
+    // Up-scale if either dimension is below the minimum
+    if (w < MIN_DIMENSION || h < MIN_DIMENSION) {
+      // Scale so the *smaller* side hits MIN_DIMENSION
+      if (w <= h) {
+        pipeline = pipeline.resize({ width: MIN_DIMENSION });
+      } else {
+        pipeline = pipeline.resize({ height: MIN_DIMENSION });
+      }
+    }
+
+    // Compress to high-quality JPEG (keeps file size manageable)
+    const compressed = await pipeline.jpeg({ quality: 90, mozjpeg: true }).toBuffer();
+
     const filename = `${slug}/cropped-${imageId}.jpg`;
 
-    const blob = await put(filename, buffer, {
+    const blob = await put(filename, compressed, {
       access: 'public',
       contentType: 'image/jpeg',
-      addRandomSuffix: false,
-      allowOverwrite: true,
+      addRandomSuffix: true,
     });
 
-    console.log(`crop-upload: saved ${buffer.length} bytes → ${blob.url}`);
+    console.log(`crop-upload: saved ${compressed.length} bytes → ${blob.url}`);
 
     // Verify blob is immediately accessible before returning URL
     const check = await fetch(blob.url, { method: 'HEAD', cache: 'no-store' });

@@ -31,6 +31,7 @@ export default function UploadPage() {
   } = useOM();
 
   const [dragOver, setDragOver] = useState(false);
+  const [imageDragOver, setImageDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const [recentSnapshots, setRecentSnapshots] = useState<RecentSnapshot[]>([]);
@@ -88,11 +89,30 @@ export default function UploadPage() {
       addStep('Uploading PDF to cloud storage...');
 
       try {
-        // 1. Upload PDF directly to Vercel Blob (bypasses 4.5MB serverless limit)
-        const blob = await upload(`uploads/${file.name}`, file, {
-          access: 'public',
-          handleUploadUrl: '/api/phase1/upload-pdf',
-        });
+        // 1. Upload PDF to Vercel Blob
+        //    Try client upload first (works on Vercel, bypasses 4.5MB limit).
+        //    Falls back to server upload for local dev where the callback URL
+        //    (localhost) is unreachable by Vercel's infrastructure.
+        let blobUrl: string;
+        try {
+          const blob = await upload(`uploads/${file.name}`, file, {
+            access: 'public',
+            handleUploadUrl: '/api/phase1/upload-pdf',
+          });
+          blobUrl = blob.url;
+        } catch {
+          // Fallback: server-side upload via FormData
+          const fd = new FormData();
+          fd.append('file', file);
+          fd.append('filename', file.name);
+          const upRes = await fetch('/api/phase1/upload-pdf-server', {
+            method: 'POST',
+            body: fd,
+          });
+          if (!upRes.ok) throw new Error('PDF upload failed');
+          const upData = await upRes.json();
+          blobUrl = upData.url;
+        }
 
         addStep('✅ PDF uploaded — starting extraction...');
 
@@ -101,7 +121,7 @@ export default function UploadPage() {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            blobUrl: blob.url,
+            blobUrl,
             fileName: file.name,
             notes,
             skipImages: !extractImages,
@@ -189,8 +209,8 @@ export default function UploadPage() {
             const extras = imgData.images.map((img: any) => ({
               ...img,
               selected: true,
-              watermark: false as const,
-              repPhoto: false,
+              watermark: true as const,
+              repRendering: false,
             }));
             allImages = [...allImages, ...extras];
             addStep(`✅ ${extras.length} image${extras.length !== 1 ? 's' : ''} uploaded`);
@@ -355,16 +375,33 @@ export default function UploadPage() {
                 </span>
               </div>
 
-              {/* Direct image upload */}
+              {/* Direct image upload — drag & drop zone */}
               <div className="mt-4">
-                <button
-                  type="button"
+                <label className="block text-sm font-medium text-gray-600 mb-1.5">
+                  Property Photos <span className="text-gray-400 font-normal">(optional)</span>
+                </label>
+                <div
+                  onDragOver={(e) => { e.preventDefault(); setImageDragOver(true); }}
+                  onDragLeave={() => setImageDragOver(false)}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    setImageDragOver(false);
+                    const files = Array.from(e.dataTransfer.files).filter((f) => f.type.startsWith('image/'));
+                    if (files.length) setUploadedImages((prev) => [...prev, ...files]);
+                  }}
                   onClick={() => imageInputRef.current?.click()}
-                  className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-gray-600 bg-gray-50 hover:bg-gray-100 border border-gray-200 transition-colors"
+                  className={`border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition-all ${
+                    imageDragOver
+                      ? 'border-emerald-400 bg-emerald-50/50 scale-[1.01]'
+                      : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50/50'
+                  }`}
                 >
-                  <ImagePlus className="w-4 h-4" />
-                  Upload Images Directly
-                </button>
+                  <div className="w-10 h-10 mx-auto mb-2 rounded-xl bg-emerald-50 flex items-center justify-center">
+                    <ImagePlus className={`w-5 h-5 ${imageDragOver ? 'text-emerald-500' : 'text-emerald-400'}`} />
+                  </div>
+                  <p className="text-sm font-medium text-gray-600">Drop images here</p>
+                  <p className="text-xs text-gray-400 mt-0.5">or click to browse — JPG, PNG, WebP</p>
+                </div>
                 <input
                   ref={imageInputRef}
                   type="file"
@@ -382,14 +419,15 @@ export default function UploadPage() {
                     {uploadedImages.map((file, idx) => (
                       <div
                         key={`${file.name}-${idx}`}
-                        className="flex items-center gap-1.5 bg-blue-50 text-blue-700 text-xs px-2.5 py-1.5 rounded-lg"
+                        className="flex items-center gap-1.5 bg-emerald-50 text-emerald-700 text-xs px-2.5 py-1.5 rounded-lg"
                       >
                         <span className="max-w-[120px] truncate">{file.name}</span>
                         <button
-                          onClick={() =>
-                            setUploadedImages((prev) => prev.filter((_, i) => i !== idx))
-                          }
-                          className="text-blue-400 hover:text-blue-600"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setUploadedImages((prev) => prev.filter((_, i) => i !== idx));
+                          }}
+                          className="text-emerald-400 hover:text-emerald-600"
                         >
                           <X className="w-3 h-3" />
                         </button>

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { Download, Eye, ZoomIn, X, ArrowLeft, MapPin, ChevronDown, ChevronRight, ChevronUp, Plus, Trash2, Copy, Check } from 'lucide-react';
 import { useOM } from '@/context/OMContext';
@@ -215,6 +215,40 @@ export default function ReviewPage() {
     setOmData(copy);
   }, [omData, setOmData]);
 
+  /** Compute meta description from current data (pure derived value, no state mutation) */
+  const computedMetaDesc = useMemo(() => {
+    if (!omData) return '';
+    const firstAgent = (omData.listing_agents || []).find(
+      a => !brokerOfRecord || a.name?.toLowerCase().trim() !== brokerOfRecord.name.toLowerCase().trim()
+    );
+    const agentName = firstAgent?.name || '';
+    const title = omData.title || '';
+    const city = omData.address?.city || '';
+    const state = omData.address?.state_abbr || '';
+    const location = [city, state].filter(Boolean).join(', ');
+    const type = omData.saleOrLease || 'for-sale';
+    if (type === 'for-lease') {
+      return `Now Leasing \u2013 ${title}${location ? ` For Lease in ${location}` : ''}. Listed by ${agentName}. Explore this property and Download the Leasing Brochure today.`;
+    } else if (type === 'for-auction') {
+      return `Now at Auction \u2013 ${title}${location ? ` in ${location}` : ''}. Listed by ${agentName}. Explore this property and Download the Offering Memorandum today.`;
+    }
+    return `Now Available \u2013 ${title}${location ? ` in ${location}` : ''}. Listed by ${agentName}. Explore this property and Download the Offering Memorandum today.`;
+  }, [omData, brokerOfRecord]);
+
+  // Sync the computed meta description into omData whenever it changes
+  useEffect(() => {
+    if (!omData || !computedMetaDesc) return;
+    if (computedMetaDesc !== omData.seo?.meta_description) {
+      // Use functional update via direct mutation on a copy to avoid stale closure
+      setOmData(prev => {
+        if (!prev) return prev;
+        const copy = JSON.parse(JSON.stringify(prev)) as OMData;
+        copy.seo.meta_description = computedMetaDesc;
+        return copy;
+      });
+    }
+  }, [computedMetaDesc]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Redirect if no data (in useEffect to avoid setState-during-render)
   useEffect(() => {
     if (!omData && !loading) {
@@ -293,17 +327,29 @@ export default function ReviewPage() {
     setOmData(copy);
   };
 
-  const moveAgentUp = (idx: number) => {
-    if (idx <= 0) return;
+  /** Get the visible (non-BOR) agent indices */
+  const getVisibleAgentIndices = () =>
+    (omData.listing_agents || []).map((a, i) => ({ a, i }))
+      .filter(({ a }) => !brokerOfRecord || a.name?.toLowerCase().trim() !== brokerOfRecord.name.toLowerCase().trim())
+      .map(({ i }) => i);
+
+  const moveAgentUp = (origIdx: number) => {
+    const visible = getVisibleAgentIndices();
+    const pos = visible.indexOf(origIdx);
+    if (pos <= 0) return;
+    const swapWith = visible[pos - 1];
     const copy = JSON.parse(JSON.stringify(omData)) as OMData;
-    [copy.listing_agents[idx - 1], copy.listing_agents[idx]] = [copy.listing_agents[idx], copy.listing_agents[idx - 1]];
+    [copy.listing_agents[swapWith], copy.listing_agents[origIdx]] = [copy.listing_agents[origIdx], copy.listing_agents[swapWith]];
     setOmData(copy);
   };
 
-  const moveAgentDown = (idx: number) => {
-    if (!omData || idx >= omData.listing_agents.length - 1) return;
+  const moveAgentDown = (origIdx: number) => {
+    const visible = getVisibleAgentIndices();
+    const pos = visible.indexOf(origIdx);
+    if (pos < 0 || pos >= visible.length - 1) return;
+    const swapWith = visible[pos + 1];
     const copy = JSON.parse(JSON.stringify(omData)) as OMData;
-    [copy.listing_agents[idx], copy.listing_agents[idx + 1]] = [copy.listing_agents[idx + 1], copy.listing_agents[idx]];
+    [copy.listing_agents[origIdx], copy.listing_agents[swapWith]] = [copy.listing_agents[swapWith], copy.listing_agents[origIdx]];
     setOmData(copy);
   };
 
@@ -466,7 +512,12 @@ export default function ReviewPage() {
                     className="w-full border border-gray-200 rounded-md px-2.5 py-1 text-[13px] font-mono focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 hover:border-gray-300 transition-colors"
                   />
                 </div>
-                <TextArea label="Meta Description" value={omData.seo?.meta_description} onChange={(v) => update('seo.meta_description', v)} rows={3} />
+                <div>
+                  <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-0.5 block">Meta Description <span className="text-gray-300 font-normal">(auto-generated from agents)</span></label>
+                  <div className="text-xs text-gray-700 bg-gray-50 border border-gray-200 rounded-md p-2 leading-relaxed min-h-[3rem]">
+                    {computedMetaDesc || <span className="text-gray-400 italic">Will populate from title, agents &amp; type...</span>}
+                  </div>
+                </div>
               </div>
             </Section>
 
@@ -529,71 +580,77 @@ export default function ReviewPage() {
 
             {/* ── Listing Agents ── */}
             <Section title={`Listing Agents (${(omData.listing_agents || []).filter(a => !brokerOfRecord || a.name?.toLowerCase().trim() !== brokerOfRecord.name.toLowerCase().trim()).length})`} defaultOpen>
-              <p className="text-[10px] text-gray-400 mb-1.5">First agent is used in SEO meta description. Use arrows to reorder.</p>
+              <p className="text-[10px] text-gray-400 mb-1.5">#1 agent is used in SEO meta. Drag order with arrows.</p>
               <div className="space-y-2">
                 {(omData.listing_agents || []).map((agent, origIdx) => ({ agent, origIdx })).filter(({ agent }) => !brokerOfRecord || agent.name?.toLowerCase().trim() !== brokerOfRecord.name.toLowerCase().trim()).map(({ agent, origIdx }, filteredIdx, filteredArr) => (
-                  <div key={origIdx} className="relative border border-blue-100 rounded-lg p-2.5 bg-blue-50/30 group/agent">
-                    {/* Reorder + Remove controls */}
-                    <div className="absolute top-1.5 right-1.5 flex items-center gap-0.5 opacity-0 group-hover/agent:opacity-100 transition-opacity">
+                  <div key={filteredIdx} className="flex gap-2 items-start">
+                    {/* Position badge + arrows column */}
+                    <div className="flex flex-col items-center gap-0.5 pt-1 min-w-[28px]">
                       <button
                         type="button"
                         onClick={() => moveAgentUp(origIdx)}
                         disabled={filteredIdx === 0}
-                        className="text-gray-300 hover:text-blue-600 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                        className="p-0.5 rounded text-gray-400 hover:text-blue-600 hover:bg-blue-100 disabled:opacity-20 disabled:cursor-not-allowed transition-colors"
                         title="Move up"
                       >
-                        <ChevronUp className="w-3.5 h-3.5" />
+                        <ChevronUp className="w-4 h-4" />
                       </button>
+                      <span className={`text-xs font-bold leading-none ${filteredIdx === 0 ? 'text-blue-600' : 'text-gray-400'}`}>
+                        {filteredIdx + 1}
+                      </span>
                       <button
                         type="button"
                         onClick={() => moveAgentDown(origIdx)}
                         disabled={filteredIdx === filteredArr.length - 1}
-                        className="text-gray-300 hover:text-blue-600 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                        className="p-0.5 rounded text-gray-400 hover:text-blue-600 hover:bg-blue-100 disabled:opacity-20 disabled:cursor-not-allowed transition-colors"
                         title="Move down"
                       >
-                        <ChevronDown className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => removeAgent(origIdx)}
-                        className="text-gray-300 hover:text-red-500 transition-colors ml-0.5"
-                        title="Remove agent"
-                      >
-                        <Trash2 className="w-3 h-3" />
+                        <ChevronDown className="w-4 h-4" />
                       </button>
                     </div>
-                    {filteredIdx === 0 && (
-                      <span className="absolute top-1.5 left-2 text-[9px] font-bold text-blue-500 uppercase tracking-wider">Primary</span>
-                    )}
-                    <div className="grid grid-cols-2 gap-1.5">
-                      {([
-                        ['Name', 'name', agent.name],
-                        ['Role', 'role', agent.role],
-                        ['Email', 'email', agent.email],
-                        ['Phone', 'phone', agent.phone],
-                      ] as const).map(([lbl, field, val]) => (
-                        <div key={field} className="relative group/af">
-                          <label className="block text-[9px] font-semibold text-gray-400 uppercase tracking-wide">{lbl}</label>
+                    {/* Agent card */}
+                    <div className="flex-1 relative border border-blue-100 rounded-lg p-2.5 bg-blue-50/30 group/agent">
+                      <div className="absolute top-1.5 right-1.5 flex items-center gap-1">
+                        {filteredIdx === 0 && <span className="text-[8px] font-bold text-blue-500 bg-blue-100 rounded px-1 py-0.5 uppercase">Primary</span>}
+                        <button
+                          type="button"
+                          onClick={() => removeAgent(origIdx)}
+                          className="text-gray-300 hover:text-red-500 transition-colors"
+                          title="Remove agent"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      </div>
+                      <div className="grid grid-cols-2 gap-1.5 mt-1">
+                        {([
+                          ['Name', 'name', agent.name],
+                          ['Role', 'role', agent.role],
+                          ['Email', 'email', agent.email],
+                          ['Phone', 'phone', agent.phone],
+                        ] as const).map(([lbl, field, val]) => (
+                          <div key={field} className="relative group/af">
+                            <label className="block text-[9px] font-semibold text-gray-400 uppercase tracking-wide">{lbl}</label>
+                            <input
+                              value={val ?? ''}
+                              onChange={(e) => updateAgent(origIdx, field as keyof OMAgent, e.target.value)}
+                              className="w-full border border-gray-200 rounded px-2 py-0.5 text-[13px] pr-6 hover:border-gray-300 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-colors"
+                            />
+                            {val && (
+                              <CopyBtn text={val} className="absolute right-1 top-[18px] opacity-0 group-hover/af:opacity-100" />
+                            )}
+                          </div>
+                        ))}
+                        <div className="col-span-2 relative group/af">
+                          <label className="block text-[9px] font-semibold text-gray-400 uppercase tracking-wide">License #</label>
                           <input
-                            value={val ?? ''}
-                            onChange={(e) => updateAgent(origIdx, field as keyof OMAgent, e.target.value)}
+                            value={agent.license_number ?? ''}
+                            onChange={(e) => updateAgent(origIdx, 'license_number', e.target.value)}
                             className="w-full border border-gray-200 rounded px-2 py-0.5 text-[13px] pr-6 hover:border-gray-300 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-colors"
                           />
-                          {val && (
-                            <CopyBtn text={val} className="absolute right-1 top-[18px] opacity-0 group-hover/af:opacity-100" />
+                          {agent.license_number && (
+                            <CopyBtn text={agent.license_number} className="absolute right-1 top-[18px] opacity-0 group-hover/af:opacity-100" />
                           )}
                         </div>
-                      ))}
-                      <div className="col-span-2 relative group/af">
-                        <label className="block text-[9px] font-semibold text-gray-400 uppercase tracking-wide">License #</label>
-                        <input
-                          value={agent.license_number ?? ''}
-                          onChange={(e) => updateAgent(origIdx, 'license_number', e.target.value)}
-                          className="w-full border border-gray-200 rounded px-2 py-0.5 text-[13px] pr-6 hover:border-gray-300 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-colors"
-                        />
-                        {agent.license_number && (
-                          <CopyBtn text={agent.license_number} className="absolute right-1 top-[18px] opacity-0 group-hover/af:opacity-100" />
-                        )}
                       </div>
                     </div>
                   </div>
@@ -894,7 +951,7 @@ export default function ReviewPage() {
           </div>
 
           {/* ═══════════ Right: PDF + Files & Images ═══════════ */}
-          <div className="flex-1 min-w-0 lg:sticky lg:top-4 lg:max-h-[92vh] flex flex-col">
+          <div className="flex-1 min-w-0 lg:sticky lg:top-14 lg:self-start lg:max-h-[calc(100vh-3.5rem)] flex flex-col">
             {/* Tab bar */}
             <div className="flex bg-white rounded-t-2xl border border-b-0 border-gray-200 overflow-hidden shrink-0">
               <button
@@ -1002,22 +1059,24 @@ export default function ReviewPage() {
                   const picBase = `${omBaseName}, pic-${i + 1}`;
                   const ext = img.filename.split('.').pop() || 'jpg';
                   const cleanName = `${picBase}.${ext}`;
-                  const wmSuffix = [img.hasWatermark ? 'WM' : '', img.hasRepPhoto ? 'RR' : ''].filter(Boolean).join(' ');
-                  const wmName = wmSuffix ? `${picBase} ${wmSuffix}.${ext}` : undefined;
+                  const wmName = img.hasWatermark ? `${picBase} WM.${ext}` : undefined;
+                  const rrName = img.hasRepRendering ? `${picBase} RR.${ext}` : undefined;
                   const origKey = `${img.originalUrl}|||${cleanName}`;
                   const origChecked = selectedDownloads.has(origKey);
                   const wmKey = img.watermarkedUrl && wmName ? `${img.watermarkedUrl}|||${wmName}` : null;
                   const wmChecked = wmKey ? selectedDownloads.has(wmKey) : false;
+                  const rrKey = img.rrUrl && rrName ? `${img.rrUrl}|||${rrName}` : null;
+                  const rrChecked = rrKey ? selectedDownloads.has(rrKey) : false;
                   return (
                   <div key={i} className="space-y-1">
                     {/* Thumbnail preview */}
                     <div
                       className="relative group rounded-xl overflow-hidden border border-gray-100 cursor-pointer"
-                      onClick={() => setLightboxImg(img.watermarkedUrl || img.originalUrl)}
+                      onClick={() => setLightboxImg(img.rrUrl || img.watermarkedUrl || img.originalUrl)}
                     >
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img
-                        src={img.watermarkedUrl || img.originalUrl}
+                        src={img.rrUrl || img.watermarkedUrl || img.originalUrl}
                         alt={cleanName}
                         className="w-full h-28 object-cover"
                         onError={(e) => {
@@ -1025,9 +1084,9 @@ export default function ReviewPage() {
                           const retries = Number(target.dataset.retries || '0');
                           if (retries < 3) {
                             target.dataset.retries = String(retries + 1);
-                            const base = img.watermarkedUrl || img.originalUrl;
+                            const base = img.rrUrl || img.watermarkedUrl || img.originalUrl;
                             setTimeout(() => { target.src = base + `?t=${Date.now()}`; }, 800 * (retries + 1));
-                          } else if (img.watermarkedUrl && !target.src.includes(img.originalUrl)) {
+                          } else if ((img.rrUrl || img.watermarkedUrl) && !target.src.includes(img.originalUrl)) {
                             target.src = img.originalUrl + `?t=${Date.now()}`;
                           }
                         }}
@@ -1036,6 +1095,7 @@ export default function ReviewPage() {
                         <ZoomIn className="w-5 h-5 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
                       </div>
                     </div>
+                    {/* Clean image */}
                     <div className={`p-2.5 rounded-xl border transition-colors ${origChecked ? 'bg-blue-100 border-blue-300 ring-1 ring-blue-200' : 'bg-blue-50 border-blue-100'}`}>
                       <div className="flex items-center gap-2 mb-1.5">
                         <input type="checkbox" checked={origChecked} onChange={() => { const s = new Set(selectedDownloads); origChecked ? s.delete(origKey) : s.add(origKey); setSelectedDownloads(s); }} className="w-3.5 h-3.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
@@ -1050,11 +1110,31 @@ export default function ReviewPage() {
                         </button>
                       </div>
                     </div>
+                    {/* RR version (Representative Rendering text — for internal use) */}
+                    {img.rrUrl && rrName && rrKey && (
+                      <div className={`p-2.5 rounded-xl border ml-3 transition-colors ${rrChecked ? 'bg-amber-100 border-amber-300 ring-1 ring-amber-200' : 'bg-amber-50 border-amber-100'}`}>
+                        <div className="flex items-center gap-2 mb-1.5">
+                          <input type="checkbox" checked={rrChecked} onChange={() => { const s = new Set(selectedDownloads); rrChecked ? s.delete(rrKey) : s.add(rrKey); setSelectedDownloads(s); }} className="w-3.5 h-3.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+                          <p className="text-xs font-medium text-amber-700 truncate">{rrName}</p>
+                          <span className="text-[9px] text-amber-500 font-medium px-1.5 py-0.5 bg-amber-100 rounded-full">Internal</span>
+                        </div>
+                        <div className="flex gap-1.5">
+                          <a href={img.rrUrl} target="_blank" rel="noopener noreferrer" className="flex-1 flex items-center justify-center gap-1 text-[11px] font-medium text-amber-600 bg-white border border-amber-200 rounded-lg py-1 hover:bg-amber-50 transition-colors">
+                            <Eye className="w-3 h-3" /> View
+                          </a>
+                          <button onClick={() => handleDownload(img.rrUrl!, rrName)} className="flex-1 flex items-center justify-center gap-1 text-[11px] font-medium text-white bg-amber-500 rounded-lg py-1 hover:bg-amber-600 transition-colors">
+                            <Download className="w-3 h-3" /> Save
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                    {/* WM version (Matthews logo watermark — for third parties) */}
                     {img.watermarkedUrl && wmName && wmKey && (
                       <div className={`p-2.5 rounded-xl border ml-3 transition-colors ${wmChecked ? 'bg-emerald-100 border-emerald-300 ring-1 ring-emerald-200' : 'bg-emerald-50 border-emerald-100'}`}>
                         <div className="flex items-center gap-2 mb-1.5">
                           <input type="checkbox" checked={wmChecked} onChange={() => { const s = new Set(selectedDownloads); wmChecked ? s.delete(wmKey) : s.add(wmKey); setSelectedDownloads(s); }} className="w-3.5 h-3.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
                           <p className="text-xs font-medium text-emerald-700 truncate">{wmName}</p>
+                          {img.hasRepRendering && <span className="text-[9px] text-emerald-500 font-medium px-1.5 py-0.5 bg-emerald-100 rounded-full">3rd Party</span>}
                         </div>
                         <div className="flex gap-1.5">
                           <a href={img.watermarkedUrl} target="_blank" rel="noopener noreferrer" className="flex-1 flex items-center justify-center gap-1 text-[11px] font-medium text-emerald-600 bg-white border border-emerald-200 rounded-lg py-1 hover:bg-emerald-50 transition-colors">
