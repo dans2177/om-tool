@@ -35,20 +35,25 @@ export default function UploadPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const [recentSnapshots, setRecentSnapshots] = useState<RecentSnapshot[]>([]);
+  const [recentLoading, setRecentLoading] = useState(true);
   const [dumping, setDumping] = useState(false);
   const [restoringIdx, setRestoringIdx] = useState<number | null>(null);
+  const [restoreError, setRestoreError] = useState<string | null>(null);
+  const [visibleCount, setVisibleCount] = useState(8);
   const [extractImages, setExtractImages] = useState(true);
   const [uploadedImages, setUploadedImages] = useState<File[]>([]);
   const [pendingPdf, setPendingPdf] = useState<File | null>(null);
 
   // Load recent snapshots on first render
   useEffect(() => {
+    setRecentLoading(true);
     fetch('/api/phase1/recent')
       .then((r) => r.json())
       .then((data) => {
         if (data.snapshots) setRecentSnapshots(data.snapshots);
       })
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => setRecentLoading(false));
   }, []);
 
   const handleDump = async () => {
@@ -450,27 +455,51 @@ export default function UploadPage() {
         </div>
 
         {/* Recent snapshots */}
-        {recentSnapshots.length > 0 && (
+        {(recentLoading || recentSnapshots.length > 0) && (
           <div className="mt-8">
-            <div className="flex items-center gap-2 mb-4">
-              <Clock className="w-4 h-4 text-gray-400" />
-              <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider">Recent OMs</h3>
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <Clock className="w-4 h-4 text-gray-400" />
+                <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider">Recent OMs</h3>
+                {!recentLoading && <span className="text-xs text-gray-400">({recentSnapshots.length})</span>}
+              </div>
             </div>
+
+            {recentLoading && (
+              <div className="flex items-center gap-2 px-4 py-3 bg-white rounded-xl border border-gray-100 text-sm text-gray-400">
+                <div className="w-4 h-4 border-2 border-blue-300 border-t-transparent rounded-full animate-spin flex-shrink-0" />
+                Loading recent OMs…
+              </div>
+            )}
+
+            {restoreError && (
+              <div className="mb-3 bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded-lg flex items-center gap-2 text-sm">
+                <X className="w-4 h-4 flex-shrink-0" />
+                {restoreError}
+                <button onClick={() => setRestoreError(null)} className="ml-auto text-red-400 hover:text-red-600"><X className="w-3.5 h-3.5" /></button>
+              </div>
+            )}
+
             <div className="space-y-2">
-              {recentSnapshots.slice(0, 10).map((snap, idx) => (
+              {recentSnapshots.slice(0, visibleCount).map((snap, idx) => (
                 <button
                   key={snap.snapshotUrl}
                   type="button"
                   disabled={restoringIdx !== null}
                   onClick={async () => {
                     setRestoringIdx(idx);
+                    setRestoreError(null);
                     try {
                       const ok = await restoreSnapshot(snap.snapshotUrl);
                       setRestoringIdx(null);
-                      router.push(ok ? '/review' : '/');
-                    } catch {
+                      if (ok) {
+                        router.push('/review');
+                      } else {
+                        setRestoreError(`Failed to restore "${snap.title}" — snapshot may be unavailable.`);
+                      }
+                    } catch (e: any) {
                       setRestoringIdx(null);
-                      router.push('/');
+                      setRestoreError(e?.message || 'Restore failed — check your connection.');
                     }
                   }}
                   className="w-full flex items-center gap-3 bg-white rounded-xl border border-gray-100 px-4 py-3 hover:border-blue-200 hover:shadow-sm transition-all group text-left disabled:opacity-50"
@@ -493,6 +522,26 @@ export default function UploadPage() {
                 </button>
               ))}
             </div>
+
+            {/* Pagination controls */}
+            {recentSnapshots.length > visibleCount && (
+              <button
+                type="button"
+                onClick={() => setVisibleCount((c) => c + 8)}
+                className="mt-3 w-full py-2 text-xs font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-xl border border-blue-100 transition-colors"
+              >
+                Show more ({recentSnapshots.length - visibleCount} remaining)
+              </button>
+            )}
+            {visibleCount > 8 && (
+              <button
+                type="button"
+                onClick={() => setVisibleCount(8)}
+                className="mt-1 w-full py-1.5 text-xs text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                Collapse
+              </button>
+            )}
           </div>
         )}
 

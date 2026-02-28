@@ -56,7 +56,7 @@ Return this exact JSON structure:
 
   "classification": {
     "retail_types": ["<from the record_type enum, can be multiple>"],
-    "retail_subtypes": ["<any sub-classifications you can identify>"]
+    "retail_subtypes": ["<subtype from the WP dropdown — pick the closest match from: Bank, Convenience Stores/Gas Station, Dollar Store, Drugstore, Education, Grocery Store, Lifestyle, Mass Merchant, Restaurant, Other. Leave empty array if not applicable.>"]
   },
 
   "tenants": ["<tenant names>"],

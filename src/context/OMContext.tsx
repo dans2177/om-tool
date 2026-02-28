@@ -52,7 +52,7 @@ interface OMContextType {
   resetAll: () => void;
 
   // Snapshot save/restore
-  saveSnapshot: () => Promise<void>;
+  saveSnapshot: () => Promise<string | null>;
   restoreSnapshot: (snapshotUrl: string) => Promise<boolean>;
 }
 
@@ -102,10 +102,10 @@ export function OMProvider({ children }: { children: ReactNode }) {
     setFinalImages([]);
   }, []);
 
-  const saveSnapshot = useCallback(async () => {
-    if (!omData) return;
+  const saveSnapshot = useCallback(async (): Promise<string | null> => {
+    if (!omData) return null;
     try {
-      await fetch('/api/phase1/recent', {
+      const res = await fetch('/api/phase1/recent', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -118,8 +118,11 @@ export function OMProvider({ children }: { children: ReactNode }) {
           images,
         }),
       });
+      const data = await res.json();
+      return data.snapshotUrl ?? null;
     } catch (e) {
       console.error('Failed to save snapshot:', e);
+      return null;
     }
   }, [omData, pdfBlobUrl, geo, brokerOfRecord, finalImages, lockedPdfUrl, images]);
 

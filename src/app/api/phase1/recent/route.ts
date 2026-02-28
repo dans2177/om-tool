@@ -13,24 +13,30 @@ export interface OMSnapshot {
 
 export async function GET() {
   try {
-    const { blobs } = await list({ prefix: 'snapshots/', limit: 50 });
+    const { blobs } = await list({ prefix: 'snapshots/', limit: 200 });
 
-    const snapshots: OMSnapshot[] = [];
-    for (const b of blobs.filter(b => b.pathname.endsWith('.json')).sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime())) {
-      try {
+    const sorted = blobs
+      .filter((b) => b.pathname.endsWith('.json'))
+      .sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime());
+
+    // Fetch all snapshot JSON files in parallel instead of sequentially
+    const results = await Promise.allSettled(
+      sorted.map(async (b) => {
         const res = await fetch(b.url);
         const data = await res.json();
-        snapshots.push({
+        return {
           title: data.omData?.title || 'Untitled',
           address: data.omData?.address?.full_address || '',
           pdfBlobUrl: data.pdfBlobUrl || '',
           savedAt: b.uploadedAt instanceof Date ? b.uploadedAt.toISOString() : String(b.uploadedAt),
           snapshotUrl: b.url,
-        });
-      } catch {
-        // skip malformed snapshots
-      }
-    }
+        } as OMSnapshot;
+      })
+    );
+
+    const snapshots = results
+      .filter((r): r is PromiseFulfilledResult<OMSnapshot> => r.status === 'fulfilled')
+      .map((r) => r.value);
 
     return NextResponse.json({ snapshots });
   } catch (error: any) {
