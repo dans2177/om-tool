@@ -1,0 +1,11 @@
+{
+  "name": "grandview-sender-extension",
+  "version": "1.0.0",
+  "description": "Chrome extension for posting property listings to WordPress, Crexi, and LoopNet",
+  "scripts": {
+    "dev": "npx chokidar-cli '*.{js,html,css,json}' --ignore 'node_modules/**' -c 'echo [ext] changed: {path}'"
+  },
+  "devDependencies": {
+    "chokidar-cli": "^3.0.0"
+  }
+}

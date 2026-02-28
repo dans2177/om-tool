@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Grandview Sender</title>
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+  <div class="container">
+    <header class="header">
+      <div class="logo">GS</div>
+      <span class="header-title">Grandview Sender</span>
+    </header>
+
+    <div id="status-bar" class="status-bar hidden"></div>
+
+    <!-- Property preview after load -->
+    <div id="property-preview" class="property-preview hidden">
+      <div class="preview-label">Loaded Property</div>
+      <div id="preview-title" class="preview-title"></div>
+      <div id="preview-address" class="preview-address"></div>
+    </div>
+
+    <!-- Recent properties dropdown -->
+    <div class="field-group">
+      <div class="label-row">
+        <label class="field-label" for="property-select">Recent Properties</label>
+        <button id="refresh-btn" class="icon-btn" title="Refresh list">↻</button>
+      </div>
+      <select id="property-select" class="select">
+        <option value="">— loading… —</option>
+      </select>
+    </div>
+
+    <!-- Paste code toggle -->
+    <div class="field-group">
+      <button id="code-toggle" class="code-toggle">▸ Paste code from review page</button>
+      <div id="code-group" class="hidden">
+        <input
+          id="code-input"
+          type="text"
+          class="input"
+          placeholder="Paste snapshot URL here…"
+        />
+      </div>
+    </div>
+
+    <!-- Load button -->
+    <button id="load-btn" class="btn btn-secondary">Load Property</button>
+
+    <!-- Divider -->
+    <div class="divider"></div>
+
+    <!-- Mode selection -->
+    <div class="field-group">
+      <label class="field-label" for="mode-select">Mode</label>
+      <select id="mode-select" class="select">
+        <option value="full">Full Batch (WP → Crexi → LoopNet)</option>
+        <option value="wp-only">WordPress Only</option>
+        <option value="third-party">Third-Party Only (Crexi + LoopNet)</option>
+      </select>
+    </div>
+
+    <!-- WordPress URL (shown only in Third-Party mode) -->
+    <div id="wp-url-group" class="field-group hidden">
+      <label class="field-label" for="wp-url-input">Existing WordPress URL</label>
+      <input
+        id="wp-url-input"
+        type="url"
+        class="input"
+        placeholder="https://live-matthewsreis.pantheonsite.io/property/..."
+      />
+    </div>
+
+    <!-- API Base URL config -->
+    <div class="field-group">
+      <label class="field-label" for="api-base-input">Grandview API Base</label>
+      <input
+        id="api-base-input"
+        type="url"
+        class="input"
+        placeholder="https://your-app.vercel.app"
+      />
+      <span class="field-hint">Saved automatically</span>
+    </div>
+
+    <!-- Test Mode -->
+    <div class="field-group" style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+      <input type="checkbox" id="test-mode-check" />
+      <label for="test-mode-check" class="field-label" style="margin:0;cursor:pointer;">
+      🧪 Test Mode <span style="font-weight:400;font-size:11px;opacity:.7">(fills TEST / 123, manual steps)</span>
+      </label>
+    </div>
+
+    <button id="go-btn" class="btn btn-primary" disabled>Go →</button>
+
+    <button id="next-action-btn" class="btn btn-secondary hidden">▶ Next Action</button>
+
+    <div id="progress" class="progress hidden">
+      <div id="progress-bar" class="progress-bar"></div>
+      <div id="progress-label" class="progress-label">Starting…</div>
+    </div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

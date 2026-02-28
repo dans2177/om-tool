@@ -1,0 +1,49 @@
+{
+  "manifest_version": 3,
+  "name": "Grandview Sender",
+  "version": "1.0.0",
+  "description": "Post finalized property listings from Grandview to WordPress, Crexi, and LoopNet.",
+  "permissions": [
+    "tabs",
+    "scripting",
+    "storage",
+    "activeTab",
+    "windows"
+  ],
+  "host_permissions": [
+    "https://live-matthewsreis.pantheonsite.io/*",
+    "https://*.crexi.com/*",
+    "https://*.loopnet.com/*",
+    "https://*.vercel.app/*",
+    "http://localhost:3000/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "Grandview Sender"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://live-matthewsreis.pantheonsite.io/wp-admin/*"],
+      "js": ["wordpress.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://*.crexi.com/*"],
+      "js": ["crexi.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://*.loopnet.com/*"],
+      "js": ["loopnet.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["popup.html"],
+      "matches": ["<all_urls>"]
+    }
+  ]
+}
