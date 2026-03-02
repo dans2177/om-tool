@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import { Download, Eye, ZoomIn, X, ArrowLeft, MapPin, ChevronDown, ChevronRight, ChevronUp, Plus, Trash2, Copy, Check } from 'lucide-react';
+import { Download, Eye, ZoomIn, X, ArrowLeft, MapPin, ChevronDown, ChevronRight, ChevronUp, Plus, Trash2, Copy, Check, Save } from 'lucide-react';
 import { useOM } from '@/context/OMContext';
 import type { OMData, OMAgent } from '@/types';
 import { RECORD_TYPES } from '@/types';
@@ -156,6 +156,8 @@ export default function ReviewPage() {
     resetAll,
     loading,
     saveSnapshot,
+    updateSnapshot,
+    snapshotUrl, setSnapshotUrl,
   } = useOM();
 
   const [descTab, setDescTab] = useState<'matthews' | 'third_parties'>('matthews');
@@ -165,24 +167,38 @@ export default function ReviewPage() {
   const dragging = useRef(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const hasSaved = useRef(false);
-  const [snapshotUrl, setSnapshotUrl] = useState<string | null>(null);
   const [codeCopied, setCodeCopied] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
 
-  // Auto-save snapshot on first load
+  // Auto-save snapshot on first load (skip if restored from existing snapshot)
   useEffect(() => {
-    if (omData && !hasSaved.current) {
+    if (omData && !hasSaved.current && !snapshotUrl) {
       hasSaved.current = true;
       saveSnapshot().then((url) => {
         if (url) setSnapshotUrl(url);
       });
     }
-  }, [omData, saveSnapshot]);
+  }, [omData, saveSnapshot, snapshotUrl, setSnapshotUrl]);
 
   const copyExtensionCode = () => {
     if (!snapshotUrl) return;
     navigator.clipboard.writeText(snapshotUrl);
     setCodeCopied(true);
     setTimeout(() => setCodeCopied(false), 2000);
+  };
+
+  const handleSaveChanges = async () => {
+    if (!snapshotUrl) return;
+    setSaving(true);
+    setSaveSuccess(false);
+    const newUrl = await updateSnapshot(snapshotUrl);
+    if (newUrl) {
+      setSnapshotUrl(newUrl);
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 2000);
+    }
+    setSaving(false);
   };
 
   /* ── Download filename builder ── */
@@ -417,7 +433,24 @@ export default function ReviewPage() {
               <p className="text-[11px] text-gray-400 truncate">{omData.address.full_address}</p>
             )}
           </div>
-          <div className="flex items-center justify-end w-16">
+          <div className="flex items-center justify-end gap-2">
+            <button
+              onClick={handleSaveChanges}
+              disabled={!snapshotUrl || saving}
+              title="Save your edits to the snapshot so the Chrome extension gets the updated data"
+              className="flex items-center gap-1 text-[11px] font-semibold px-2 py-1 rounded-lg transition-colors bg-blue-50 border border-blue-200 text-blue-700 hover:bg-blue-100 disabled:opacity-40 disabled:cursor-wait"
+            >
+              {saving ? (
+                <div className="w-3 h-3 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
+              ) : saveSuccess ? (
+                <Check className="w-3 h-3 text-green-600" />
+              ) : (
+                <Save className="w-3 h-3" />
+              )}
+              <span className="hidden sm:inline">
+                {saving ? 'Saving…' : saveSuccess ? 'Saved!' : 'Save Changes'}
+              </span>
+            </button>
             <button
               onClick={copyExtensionCode}
               disabled={!snapshotUrl}

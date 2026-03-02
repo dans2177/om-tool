@@ -3,28 +3,35 @@
 
 const WP_NEW_PROPERTY_URL =
   'https://live-matthewsreis.pantheonsite.io/wp-admin/post-new.php?post_type=property';
-const CREXI_NEW_URL   = 'https://www.crexi.com/sell';
+const CREXI_NEW_URL   = 'https://www.crexi.com/add-properties';
 const LOOPNET_NEW_URL = 'https://www.loopnet.com/services/list-property/';
 
 // ── Persistent popup window ────────────────────────────────────────────────────
 let popupWindowId = null;
-let currentWpTabId = null; // track so we can relay GV_NEXT to WP content script
+let currentActiveTabId = null; // track so we can relay GV_NEXT to the running content script
 
-chrome.action.onClicked.addListener(() => {
+chrome.action.onClicked.addListener(async () => {
   const popupUrl = chrome.runtime.getURL('popup.html');
+
+  // Check in-memory ID first (fast path)
   if (popupWindowId !== null) {
-    // Focus the existing window if it's still open
-    chrome.windows.get(popupWindowId, (win) => {
-      if (chrome.runtime.lastError || !win) {
-        popupWindowId = null;
-        openPopupWindow(popupUrl);
-      } else {
-        chrome.windows.update(popupWindowId, { focused: true });
-      }
-    });
-  } else {
-    openPopupWindow(popupUrl);
+    try {
+      const win = await chrome.windows.get(popupWindowId);
+      if (win) { chrome.windows.update(popupWindowId, { focused: true }); return; }
+    } catch (_) { popupWindowId = null; }
   }
+
+  // Fallback: scan all windows for an existing popup (handles service-worker restart)
+  const allWindows = await chrome.windows.getAll({ populate: true });
+  for (const win of allWindows) {
+    if (win.type === 'popup' && win.tabs?.some((t) => t.url === popupUrl)) {
+      popupWindowId = win.id;
+      chrome.windows.update(win.id, { focused: true });
+      return;
+    }
+  }
+
+  openPopupWindow(popupUrl);
 });
 
 function openPopupWindow(url) {
@@ -48,9 +55,20 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     return true; // keep channel open
   }
   if (msg.type === 'GV_NEXT_REQUEST') {
-    if (currentWpTabId !== null) {
-      sendToTab(currentWpTabId, { type: 'GV_NEXT' }).catch(() => {});
+    if (currentActiveTabId !== null) {
+      sendToTab(currentActiveTabId, { type: 'GV_NEXT' }).catch(() => {});
     }
+  }
+  // Relay GV_WAITING from content scripts to the popup and bring popup to front
+  if (msg.type === 'GV_WAITING') {
+    broadcastAll(msg);
+    if (popupWindowId !== null) {
+      chrome.windows.update(popupWindowId, { focused: true }).catch(() => {});
+    }
+  }
+  // Relay GV_PROGRESS from content scripts to the popup
+  if (msg.type === 'GV_PROGRESS') {
+    broadcastAll(msg);
   }
 });
 
@@ -95,6 +113,25 @@ async function openTab(url) {
   // Extra buffer for JS-heavy pages (ACF, WP admin, etc.)
   await sleep(1500);
   return tab.id;
+}
+
+// ── Reuse an existing WP post-new tab (test mode) or open a fresh one ─────────
+async function findOrOpenWpTab(reuseExisting) {
+  if (reuseExisting) {
+    const tabs = await chrome.tabs.query({
+      url: 'https://live-matthewsreis.pantheonsite.io/wp-admin/post-new.php*',
+    });
+    if (tabs.length > 0) {
+      const tab = tabs[0];
+      // Reload the tab so the content script is freshly injected (avoids orphan issues)
+      await chrome.tabs.reload(tab.id);
+      await chrome.windows.update(tab.windowId, { focused: true });
+      await waitForTabLoad(tab.id);
+      await sleep(1500);
+      return tab.id;
+    }
+  }
+  return openTab(WP_NEW_PROPERTY_URL);
 }
 
 // ── Wait for content script to confirm it's done ─────────────────────────────
@@ -149,8 +186,8 @@ async function runSequence({ sendWP, sendCrexi, sendLoopNet, existingWpUrl, test
   // ── Step 1: WordPress ──────────────────────────────────────────────────────
   if (sendWP) {
     progress('Opening WordPress…');
-    const wpTabId = await openTab(WP_NEW_PROPERTY_URL);
-    currentWpTabId = wpTabId;
+    const wpTabId = await findOrOpenWpTab(!!testMode);
+    currentActiveTabId = wpTabId;
 
     progress('Filling WordPress form…');
     // Extended timeout in test mode since each step requires a manual click
@@ -167,16 +204,18 @@ async function runSequence({ sendWP, sendCrexi, sendLoopNet, existingWpUrl, test
   if (sendCrexi) {
     progress('Opening Crexi…');
     const crexiTabId = await openTab(CREXI_NEW_URL);
+    currentActiveTabId = crexiTabId;
     await chrome.storage.local.set({ gvWpUrl: wpPermalink });
 
     progress('Filling Crexi form…');
-    await runContentScript(crexiTabId, 'GV_CREXI_FILL');
+    await runContentScript(crexiTabId, 'GV_CREXI_FILL', 2000, testMode ? 1_800_000 : 120_000);
   }
 
   // ── Step 3: LoopNet ────────────────────────────────────────────────────────
   if (sendLoopNet) {
     progress('Opening LoopNet…');
     const loopTabId = await openTab(LOOPNET_NEW_URL);
+    currentActiveTabId = loopTabId;
     await chrome.storage.local.set({ gvWpUrl: wpPermalink });
 
     progress('Filling LoopNet form…');

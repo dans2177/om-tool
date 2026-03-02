@@ -48,11 +48,16 @@ interface OMContextType {
   finalImages: FinalizedImage[];
   setFinalImages: (v: FinalizedImage[]) => void;
 
+  // Snapshot tracking
+  snapshotUrl: string | null;
+  setSnapshotUrl: (v: string | null) => void;
+
   // Reset for new OM
   resetAll: () => void;
 
   // Snapshot save/restore
   saveSnapshot: () => Promise<string | null>;
+  updateSnapshot: (snapshotUrl: string) => Promise<string | null>;
   restoreSnapshot: (snapshotUrl: string) => Promise<boolean>;
 }
 
@@ -78,6 +83,7 @@ export function OMProvider({ children }: { children: ReactNode }) {
 
   const [lockedPdfUrl, setLockedPdfUrl] = useState('');
   const [finalImages, setFinalImages] = useState<FinalizedImage[]>([]);
+  const [snapshotUrl, setSnapshotUrl] = useState<string | null>(null);
 
   const addStep = useCallback((message: string) => {
     setProgressSteps((prev) => [...prev, { message, timestamp: new Date() }]);
@@ -100,6 +106,7 @@ export function OMProvider({ children }: { children: ReactNode }) {
     setLightboxImg(null);
     setLockedPdfUrl('');
     setFinalImages([]);
+    setSnapshotUrl(null);
   }, []);
 
   const saveSnapshot = useCallback(async (): Promise<string | null> => {
@@ -126,6 +133,31 @@ export function OMProvider({ children }: { children: ReactNode }) {
     }
   }, [omData, pdfBlobUrl, geo, brokerOfRecord, finalImages, lockedPdfUrl, images]);
 
+  const updateSnapshot = useCallback(async (snapshotUrl: string): Promise<string | null> => {
+    if (!omData) return null;
+    try {
+      const res = await fetch('/api/phase1/recent', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          snapshotUrl,
+          omData,
+          pdfBlobUrl,
+          geo,
+          brokerOfRecord,
+          finalImages,
+          lockedPdfUrl,
+          images,
+        }),
+      });
+      const data = await res.json();
+      return data.snapshotUrl ?? null;
+    } catch (e) {
+      console.error('Failed to update snapshot:', e);
+      return null;
+    }
+  }, [omData, pdfBlobUrl, geo, brokerOfRecord, finalImages, lockedPdfUrl, images]);
+
   const restoreSnapshot = useCallback(async (snapshotUrl: string): Promise<boolean> => {
     try {
       const res = await fetch(snapshotUrl);
@@ -138,6 +170,7 @@ export function OMProvider({ children }: { children: ReactNode }) {
       if (data.finalImages) setFinalImages(data.finalImages);
       if (data.lockedPdfUrl) setLockedPdfUrl(data.lockedPdfUrl);
       if (data.images) setImages(data.images);
+      setSnapshotUrl(snapshotUrl);
       return true;
     } catch (e) {
       console.error('Failed to restore snapshot:', e);
@@ -163,8 +196,10 @@ export function OMProvider({ children }: { children: ReactNode }) {
         lightboxImg, setLightboxImg,
         lockedPdfUrl, setLockedPdfUrl,
         finalImages, setFinalImages,
+        snapshotUrl, setSnapshotUrl,
         resetAll,
         saveSnapshot,
+        updateSnapshot,
         restoreSnapshot,
       }}
     >

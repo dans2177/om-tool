@@ -8,7 +8,8 @@
     "scripting",
     "storage",
     "activeTab",
-    "windows"
+    "windows",
+    "clipboardWrite"
   ],
   "host_permissions": [
     "https://live-matthewsreis.pantheonsite.io/*",
@@ -26,17 +27,50 @@
   "content_scripts": [
     {
       "matches": ["https://live-matthewsreis.pantheonsite.io/wp-admin/*"],
-      "js": ["wordpress.js"],
+      "js": [
+        "shared/test-data.js",
+        "wordpress/helpers.js",
+        "wordpress/types.js",
+        "wordpress/step-title.js",
+        "wordpress/step-seo.js",
+        "wordpress/step-type.js",
+        "wordpress/step-address.js",
+        "wordpress/step-financials.js",
+        "wordpress/step-broker.js",
+        "wordpress/step-media.js",
+        "wordpress/step-publish.js",
+        "wordpress/router.js"
+      ],
       "run_at": "document_idle"
     },
     {
       "matches": ["https://*.crexi.com/*"],
-      "js": ["crexi.js"],
+      "js": [
+        "shared/test-data.js",
+        "crexi/helpers.js",
+        "crexi/types.js",
+        "crexi/step-choose.js",
+        "crexi/step-property-type.js",
+        "crexi/step-address.js",
+        "crexi/step-details.js",
+        "crexi/step-financials.js",
+        "crexi/step-description.js",
+        "crexi/step-media.js",
+        "crexi/step-om.js",
+        "crexi/step-review.js",
+        "crexi/router.js"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://*.crexi.com/*"],
+      "js": ["crexi/page-world.js"],
+      "world": "MAIN",
       "run_at": "document_idle"
     },
     {
       "matches": ["https://*.loopnet.com/*"],
-      "js": ["loopnet.js"],
+      "js": ["shared/test-data.js", "loopnet.js"],
       "run_at": "document_idle"
     }
   ],

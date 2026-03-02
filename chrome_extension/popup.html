@@ -3,106 +3,125 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Grandview Sender</title>
+  <title>Matthews Publisher</title>
   <link rel="stylesheet" href="popup.css" />
 </head>
 <body>
   <div class="container">
+
+    <!-- Header -->
     <header class="header">
-      <div class="logo">GS</div>
-      <span class="header-title">Grandview Sender</span>
+      <div class="logo">M</div>
+      <div class="header-text">
+        <div class="header-title">Matthews Publisher</div>
+        <div class="header-sub">Listing automation tool</div>
+      </div>
     </header>
 
+    <!-- Status bar -->
     <div id="status-bar" class="status-bar hidden"></div>
 
-    <!-- Property preview after load -->
-    <div id="property-preview" class="property-preview hidden">
-      <div class="preview-label">Loaded Property</div>
-      <div id="preview-title" class="preview-title"></div>
-      <div id="preview-address" class="preview-address"></div>
+    <!-- Property preview card (shown after load) -->
+    <div id="property-preview" class="property-card hidden">
+      <div class="property-card-badge">Ready to post</div>
+      <div id="preview-title" class="property-card-title"></div>
+      <div id="preview-address" class="property-card-address"></div>
     </div>
 
-    <!-- Recent properties dropdown -->
-    <div class="field-group">
-      <div class="label-row">
-        <label class="field-label" for="property-select">Recent Properties</label>
-        <button id="refresh-btn" class="icon-btn" title="Refresh list">↻</button>
+    <!-- Section: Select Property -->
+    <div class="section">
+      <div class="section-header">
+        <span class="section-title">Select Property</span>
+        <button id="refresh-btn" class="icon-btn" title="Refresh list">&#x21bb;</button>
       </div>
       <select id="property-select" class="select">
-        <option value="">— loading… —</option>
+        <option value="">-- loading... --</option>
       </select>
-    </div>
 
-    <!-- Paste code toggle -->
-    <div class="field-group">
-      <button id="code-toggle" class="code-toggle">▸ Paste code from review page</button>
+      <!-- Paste code toggle -->
+      <button id="code-toggle" class="link-btn">Paste a snapshot URL instead</button>
       <div id="code-group" class="hidden">
         <input
           id="code-input"
           type="text"
           class="input"
-          placeholder="Paste snapshot URL here…"
+          placeholder="Paste snapshot URL here..."
+        />
+      </div>
+
+      <button id="load-btn" class="btn btn-secondary">Load Property</button>
+    </div>
+
+    <!-- Section: Platforms -->
+    <div class="section">
+      <div class="section-title">Post to</div>
+      <div class="platform-toggles">
+        <label class="platform-toggle">
+          <input type="checkbox" id="send-wp" checked />
+          <span class="toggle-label">WordPress</span>
+        </label>
+        <label class="platform-toggle">
+          <input type="checkbox" id="send-crexi" checked />
+          <span class="toggle-label">Crexi</span>
+        </label>
+        <label class="platform-toggle">
+          <input type="checkbox" id="send-loopnet" />
+          <span class="toggle-label">LoopNet</span>
+        </label>
+      </div>
+
+      <!-- WordPress URL (shown when WP unchecked but Crexi/LoopNet checked) -->
+      <div id="wp-url-group" class="hidden">
+        <label class="input-label" for="wp-url-input">Existing WordPress listing URL</label>
+        <input
+          id="wp-url-input"
+          type="url"
+          class="input"
+          placeholder="https://live-matthewsreis.pantheonsite.io/property/..."
         />
       </div>
     </div>
 
-    <!-- Load button -->
-    <button id="load-btn" class="btn btn-secondary">Load Property</button>
+    <!-- Go button -->
+    <button id="go-btn" class="btn btn-primary" disabled>Start Posting</button>
 
-    <!-- Divider -->
-    <div class="divider"></div>
+    <!-- Manual step instruction (shown during pauses) -->
+    <div id="manual-instruction" class="manual-instruction hidden"></div>
 
-    <!-- Mode selection -->
-    <div class="field-group">
-      <label class="field-label" for="mode-select">Mode</label>
-      <select id="mode-select" class="select">
-        <option value="full">Full Batch (WP → Crexi → LoopNet)</option>
-        <option value="wp-only">WordPress Only</option>
-        <option value="third-party">Third-Party Only (Crexi + LoopNet)</option>
-      </select>
-    </div>
+    <!-- Continue / Restart buttons -->
+    <button id="next-action-btn" class="btn btn-continue hidden">Continue</button>
+    <button id="restart-btn" class="btn btn-restart hidden">Start Over</button>
 
-    <!-- WordPress URL (shown only in Third-Party mode) -->
-    <div id="wp-url-group" class="field-group hidden">
-      <label class="field-label" for="wp-url-input">Existing WordPress URL</label>
-      <input
-        id="wp-url-input"
-        type="url"
-        class="input"
-        placeholder="https://live-matthewsreis.pantheonsite.io/property/..."
-      />
-    </div>
-
-    <!-- API Base URL config -->
-    <div class="field-group">
-      <label class="field-label" for="api-base-input">Grandview API Base</label>
-      <input
-        id="api-base-input"
-        type="url"
-        class="input"
-        placeholder="https://your-app.vercel.app"
-      />
-      <span class="field-hint">Saved automatically</span>
-    </div>
-
-    <!-- Test Mode -->
-    <div class="field-group" style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
-      <input type="checkbox" id="test-mode-check" />
-      <label for="test-mode-check" class="field-label" style="margin:0;cursor:pointer;">
-      🧪 Test Mode <span style="font-weight:400;font-size:11px;opacity:.7">(fills TEST / 123, manual steps)</span>
-      </label>
-    </div>
-
-    <button id="go-btn" class="btn btn-primary" disabled>Go →</button>
-
-    <button id="next-action-btn" class="btn btn-secondary hidden">▶ Next Action</button>
-
+    <!-- Progress bar -->
     <div id="progress" class="progress hidden">
-      <div id="progress-bar" class="progress-bar"></div>
-      <div id="progress-label" class="progress-label">Starting…</div>
+      <div class="progress-track">
+        <div id="progress-bar" class="progress-bar"></div>
+      </div>
+      <div id="progress-label" class="progress-label">Starting...</div>
     </div>
-  </div>
 
+    <!-- Footer: Advanced + Test Mode -->
+    <div class="footer">
+      <div class="advanced-row">
+        <button id="adv-toggle" class="link-btn">Advanced</button>
+        <label class="test-mode-label">
+          <input type="checkbox" id="test-mode-check" />
+          <span>Test Mode</span>
+        </label>
+      </div>
+      <div id="adv-group" class="adv-group hidden">
+        <label class="input-label" for="api-base-input">API base URL</label>
+        <input
+          id="api-base-input"
+          type="url"
+          class="input"
+          placeholder="https://your-app.vercel.app"
+        />
+        <span class="input-hint">Changes are saved automatically</span>
+      </div>
+    </div>
+
+  </div>
   <script src="popup.js"></script>
 </body>
 </html>

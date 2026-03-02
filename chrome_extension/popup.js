@@ -7,7 +7,9 @@ window.__gvPopupInit = true;
 function init() {
 const $ = (id) => document.getElementById(id);
 
-const modeSelect      = $('mode-select');
+const sendWpCheck      = $('send-wp');
+const sendCrexiCheck   = $('send-crexi');
+const sendLoopNetCheck = $('send-loopnet');
 const wpUrlGroup      = $('wp-url-group');
 const wpUrlInput      = $('wp-url-input');
 const apiBaseInput    = $('api-base-input');
@@ -19,6 +21,7 @@ const codeInput       = $('code-input');
 const loadBtn         = $('load-btn');
 const goBtn           = $('go-btn');
 const nextActionBtn   = $('next-action-btn');
+const restartBtn      = $('restart-btn');
 const testModeCheck   = $('test-mode-check');
 const statusBar       = $('status-bar');
 const preview         = $('property-preview');
@@ -29,26 +32,29 @@ const progressBar     = $('progress-bar');
 const progressLbl     = $('progress-label');
 
 // Guard: if core elements don't exist we're not in the popup document
-if (!modeSelect || !goBtn) return;
+if (!sendWpCheck || !goBtn) return;
 
 let currentProperty = null;
 
 // ── Persist / restore settings ───────────────────────────────────────────────
-// ── Hard-coded defaults ──────────────────────────────────────────────────────
-const DEFAULT_API_BASE   = 'http://localhost:3000';
-const VERCEL_API_BASE    = 'https://grandview-placeholder.vercel.app'; // TODO: replace with real URL
+const DEFAULT_API_BASE = 'http://localhost:3000';
 
-chrome.storage.local.get(['apiBase', 'mode', 'wpUrl', 'testMode'], (data) => {
-  apiBaseInput.value     = data.apiBase  || DEFAULT_API_BASE;
-  if (data.mode)    modeSelect.value     = data.mode;
-  if (data.wpUrl)   wpUrlInput.value     = data.wpUrl;
-  if (data.testMode) {
-    testModeCheck.checked = true;
-    goBtn.disabled = false;
+chrome.storage.local.get(
+  ['apiBase', 'sendWP', 'sendCrexi', 'sendLoopNet', 'wpUrl', 'testMode'],
+  (data) => {
+    apiBaseInput.value = data.apiBase || DEFAULT_API_BASE;
+    if (data.sendWP !== undefined)      sendWpCheck.checked      = data.sendWP;
+    if (data.sendCrexi !== undefined)   sendCrexiCheck.checked   = data.sendCrexi;
+    if (data.sendLoopNet !== undefined) sendLoopNetCheck.checked = data.sendLoopNet;
+    if (data.wpUrl)   wpUrlInput.value = data.wpUrl;
+    if (data.testMode) {
+      testModeCheck.checked = true;
+      goBtn.disabled = false;
+    }
+    updatePlatformUI();
+    loadRecentList();
   }
-  updateModeUI();
-  loadRecentList();
-});
+);
 
 apiBaseInput.addEventListener('change', () => {
   chrome.storage.local.set({ apiBase: apiBaseInput.value.trim() });
@@ -58,30 +64,50 @@ wpUrlInput.addEventListener('change', () => {
 });
 testModeCheck.addEventListener('change', () => {
   chrome.storage.local.set({ testMode: testModeCheck.checked });
-  // In test mode, no property load needed — enable Go immediately
   if (testModeCheck.checked) {
     goBtn.disabled = false;
   } else if (!currentProperty) {
     goBtn.disabled = true;
   }
 });
-modeSelect.addEventListener('change', () => {
-  chrome.storage.local.set({ mode: modeSelect.value });
-  updateModeUI();
-});
 
-function updateModeUI() {
-  wpUrlGroup.classList.toggle('hidden', modeSelect.value !== 'third-party');
+// ── Platform checkbox handlers ───────────────────────────────────────────────
+function updatePlatformUI() {
+  const wpOn      = sendWpCheck.checked;
+  const crexiOn   = sendCrexiCheck.checked;
+  const loopNetOn = sendLoopNetCheck.checked;
+  // Show WP URL input when WP is off but at least one third-party is on
+  wpUrlGroup.classList.toggle('hidden', wpOn || (!crexiOn && !loopNetOn));
 }
+
+function savePlatformState() {
+  chrome.storage.local.set({
+    sendWP:      sendWpCheck.checked,
+    sendCrexi:   sendCrexiCheck.checked,
+    sendLoopNet: sendLoopNetCheck.checked,
+  });
+  updatePlatformUI();
+}
+
+sendWpCheck.addEventListener('change', savePlatformState);
+sendCrexiCheck.addEventListener('change', savePlatformState);
+sendLoopNetCheck.addEventListener('change', savePlatformState);
 
 // ── Paste-code toggle ─────────────────────────────────────────────────────────
 codeToggle.addEventListener('click', () => {
   const open = !codeGroup.classList.contains('hidden');
   codeGroup.classList.toggle('hidden', open);
-  codeToggle.textContent = open
-    ? '▸ Paste code from review page'
-    : '▾ Paste code from review page';
+  codeToggle.textContent = 'Paste a snapshot URL instead';
 });
+
+// ── Advanced settings toggle ───────────────────────────────────────────────────
+const advToggle = $('adv-toggle');
+const advGroup  = $('adv-group');
+if (advToggle && advGroup) {
+  advToggle.addEventListener('click', () => {
+    advGroup.classList.toggle('hidden');
+  });
+}
 
 // ── Status helpers ────────────────────────────────────────────────────────────
 function setStatus(msg, type = 'info') {
@@ -103,7 +129,7 @@ async function loadRecentList() {
   const base = apiBaseInput.value.trim();
   if (!base) return;
 
-  propertySelect.innerHTML = '<option value="">— loading… —</option>';
+  propertySelect.innerHTML = '<option value="">-- loading... --</option>';
   refreshBtn.disabled = true;
 
   try {
@@ -113,18 +139,18 @@ async function loadRecentList() {
     const snaps = data.snapshots || [];
 
     if (snaps.length === 0) {
-      propertySelect.innerHTML = '<option value="">— no properties found —</option>';
+      propertySelect.innerHTML = '<option value="">-- no properties found --</option>';
       return;
     }
 
     propertySelect.innerHTML = snaps.map((s, i) => {
       const date = new Date(s.savedAt).toLocaleDateString();
-      const label = [s.title, s.address ? `· ${s.address}` : '', `(${date})`].filter(Boolean).join(' ');
+      const label = [s.title, s.address ? `\u00b7 ${s.address}` : '', `(${date})`].filter(Boolean).join(' ');
       return `<option value="${encodeURIComponent(s.snapshotUrl)}"${i === 0 ? ' selected' : ''}>${label}</option>`;
     }).join('');
 
   } catch (err) {
-    propertySelect.innerHTML = '<option value="">— failed to load —</option>';
+    propertySelect.innerHTML = '<option value="">-- failed to load --</option>';
     setStatus(`Could not load list: ${err.message}`, 'error');
   } finally {
     refreshBtn.disabled = false;
@@ -141,7 +167,6 @@ async function loadProperty() {
   const pastedCode  = codeInput.value.trim();
   const selectedUrl = propertySelect.value ? decodeURIComponent(propertySelect.value) : '';
 
-  // Decide which source to use
   const snapshotUrl = pastedCode || selectedUrl;
 
   if (!snapshotUrl && !base) {
@@ -149,19 +174,17 @@ async function loadProperty() {
     return;
   }
 
-  setStatus('Loading property…');
+  setStatus('Loading property...');
   loadBtn.disabled = true;
 
   try {
     let data;
 
     if (snapshotUrl) {
-      // Fetch the raw blob JSON directly — works for both pasted code & dropdown
       const resp = await fetch(`${base}/api/phase1/properties?snapshot=${encodeURIComponent(snapshotUrl)}`, { cache: 'no-store' });
       if (!resp.ok) throw new Error(`API returned ${resp.status}`);
       data = await resp.json();
     } else {
-      // Fallback: fetch the latest
       const resp = await fetch(`${base}/api/phase1/properties`, { cache: 'no-store' });
       if (!resp.ok) throw new Error(`API returned ${resp.status}`);
       data = await resp.json();
@@ -176,7 +199,7 @@ async function loadProperty() {
 
     setStatus(`Loaded: ${data.title}`, 'success');
     goBtn.disabled = false;
-    codeInput.value = ''; // clear paste field after load
+    codeInput.value = '';
   } catch (err) {
     setStatus(`Load failed: ${err.message}`, 'error');
   } finally {
@@ -191,20 +214,27 @@ goBtn.addEventListener('click', async () => {
     return;
   }
 
-  const mode          = modeSelect.value;
-  const sendWP        = mode === 'full' || mode === 'wp-only';
-  const sendCrexi     = mode === 'full' || mode === 'third-party';
-  const sendLoopNet   = mode === 'full' || mode === 'third-party';
-  const existingWpUrl = mode === 'third-party' ? wpUrlInput.value.trim() : null;
+  const sendWP      = sendWpCheck.checked;
+  const sendCrexi   = sendCrexiCheck.checked;
+  const sendLoopNet = sendLoopNetCheck.checked;
 
-  if (mode === 'third-party' && !existingWpUrl) {
-    setStatus('Enter a WordPress property URL for Third-Party mode.', 'error');
+  if (!sendWP && !sendCrexi && !sendLoopNet) {
+    setStatus('Select at least one platform.', 'error');
     return;
   }
 
-  goBtn.disabled  = true;
+  const existingWpUrl = !sendWP && (sendCrexi || sendLoopNet)
+    ? wpUrlInput.value.trim()
+    : null;
+
+  if (!sendWP && (sendCrexi || sendLoopNet) && !existingWpUrl) {
+    setStatus('Enter a WordPress property URL for third-party posting.', 'error');
+    return;
+  }
+
+  goBtn.disabled   = true;
   loadBtn.disabled = true;
-  setProgress(5, 'Starting…');
+  setProgress(5, 'Starting...');
   clearStatus();
 
   const testMode = testModeCheck.checked;
@@ -213,7 +243,6 @@ goBtn.addEventListener('click', async () => {
     chrome.storage.local.set(
       {
         gvProperty:      currentProperty,
-        gvMode:          mode,
         gvExistingWpUrl: existingWpUrl || '',
         gvSendCrexi:     sendCrexi,
         gvSendLoopNet:   sendLoopNet,
@@ -228,7 +257,7 @@ goBtn.addEventListener('click', async () => {
     (resp) => {
       if (chrome.runtime.lastError) {
         setStatus(`Error: ${chrome.runtime.lastError.message}`, 'error');
-        goBtn.disabled  = false;
+        goBtn.disabled   = false;
         loadBtn.disabled = false;
       }
     }
@@ -239,29 +268,56 @@ goBtn.addEventListener('click', async () => {
 nextActionBtn.addEventListener('click', () => {
   nextActionBtn.classList.add('hidden');
   nextActionBtn.disabled = true;
+  const instrEl = $('manual-instruction');
+  if (instrEl) instrEl.classList.add('hidden');
   chrome.runtime.sendMessage({ type: 'GV_NEXT_REQUEST' });
+});
+
+// ── Restart button — reset UI so Go can be clicked again ─────────────────────
+function resetPopupUI() {
+  nextActionBtn.classList.add('hidden');
+  nextActionBtn.disabled = true;
+  restartBtn.classList.add('hidden');
+  const instrEl = $('manual-instruction');
+  if (instrEl) instrEl.classList.add('hidden');
+  progressEl.classList.add('hidden');
+  goBtn.disabled   = !currentProperty && !testModeCheck.checked;
+  loadBtn.disabled = false;
+}
+restartBtn.addEventListener('click', () => {
+  clearStatus();
+  resetPopupUI();
 });
 
 // ── Listen for progress/done/error from background ────────────────────
 chrome.runtime.onMessage.addListener((msg) => {
-  if (msg.type === 'GV_PROGRESS') setProgress(msg.pct, msg.label);
+  if (msg.type === 'GV_PROGRESS') {
+    setProgress(msg.pct, msg.label);
+    restartBtn.classList.remove('hidden');
+  }
   if (msg.type === 'GV_WAITING') {
+    const instrEl = $('manual-instruction');
+    if (instrEl) {
+      if (msg.message) {
+        instrEl.textContent = msg.message;
+        instrEl.classList.remove('hidden');
+      } else {
+        instrEl.classList.add('hidden');
+      }
+    }
     nextActionBtn.classList.remove('hidden');
     nextActionBtn.disabled = false;
+    restartBtn.classList.remove('hidden');
   }
   if (msg.type === 'GV_DONE') {
-    setProgress(100, '✓ All done!');
+    setProgress(100, 'All done!');
     setStatus('Posting complete.', 'success');
-    nextActionBtn.classList.add('hidden');
-    goBtn.disabled  = false;
-    loadBtn.disabled = false;
+    resetPopupUI();
   }
   if (msg.type === 'GV_ERROR') {
     setStatus(`Error: ${msg.message}`, 'error');
-    nextActionBtn.classList.add('hidden');
     progressEl.classList.add('hidden');
-    goBtn.disabled  = false;
-    loadBtn.disabled = false;
+    resetPopupUI();
   }
 });
 } // end init

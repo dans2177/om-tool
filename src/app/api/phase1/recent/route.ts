@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { list, put, del } from '@vercel/blob';
+import { list, put, del, head } from '@vercel/blob';
 
 export const dynamic = 'force-dynamic';
 
@@ -80,6 +80,35 @@ export async function DELETE(req: NextRequest) {
     }
     return NextResponse.json({ success: true });
   } catch (error: any) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+}
+
+export async function PUT(req: NextRequest) {
+  try {
+    const body = await req.json();
+    const { snapshotUrl, omData, pdfBlobUrl, geo, brokerOfRecord, finalImages, lockedPdfUrl, images } = body;
+
+    if (!snapshotUrl || !omData) {
+      return NextResponse.json({ error: 'snapshotUrl and omData are required' }, { status: 400 });
+    }
+
+    // Resolve the pathname from the existing blob
+    const blobInfo = await head(snapshotUrl);
+    const pathname = blobInfo.pathname;
+
+    // Delete old blob then write new one at the same pathname
+    await del(snapshotUrl);
+
+    const snapshot = { omData, pdfBlobUrl, geo, brokerOfRecord, finalImages, lockedPdfUrl, images };
+    const blob = await put(pathname, JSON.stringify(snapshot), {
+      access: 'public',
+      contentType: 'application/json',
+    });
+
+    return NextResponse.json({ success: true, snapshotUrl: blob.url });
+  } catch (error: any) {
+    console.error('Update snapshot error:', error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
