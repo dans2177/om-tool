@@ -15,6 +15,7 @@
     "https://live-matthewsreis.pantheonsite.io/*",
     "https://*.crexi.com/*",
     "https://*.loopnet.com/*",
+    "https://listingmanager.costar.com/*",
     "https://*.vercel.app/*",
     "http://localhost:3000/*"
   ],
@@ -69,8 +70,20 @@
       "run_at": "document_idle"
     },
     {
-      "matches": ["https://*.loopnet.com/*"],
-      "js": ["shared/test-data.js", "loopnet.js"],
+      "matches": ["https://*.loopnet.com/*", "https://listingmanager.costar.com/*"],
+      "js": [
+        "shared/test-data.js",
+        "loopnet/helpers.js",
+        "loopnet/types.js",
+        "loopnet/step-choose.js",
+        "loopnet/step-category.js",
+        "loopnet/step-address.js",
+        "loopnet/step-details.js",
+        "loopnet/step-description.js",
+        "loopnet/step-media.js",
+        "loopnet/step-review.js",
+        "loopnet/router.js"
+      ],
       "run_at": "document_idle"
     }
   ],

@@ -4,7 +4,7 @@
 const WP_NEW_PROPERTY_URL =
   'https://live-matthewsreis.pantheonsite.io/wp-admin/post-new.php?post_type=property';
 const CREXI_NEW_URL   = 'https://www.crexi.com/add-properties';
-const LOOPNET_NEW_URL = 'https://www.loopnet.com/services/list-property/';
+const LOOPNET_NEW_URL = 'https://listingmanager.costar.com/my-listings';
 
 // ── Persistent popup window ────────────────────────────────────────────────────
 let popupWindowId = null;
